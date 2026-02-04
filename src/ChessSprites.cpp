@@ -1,11 +1,13 @@
 #include "ChessSprites.h"
+#include "EmbeddedChessSprites.h"
 #include <Arduino.h>
 #include <SDCardManager.h>
 #include <cstring>
 
 namespace ChessSprites {
 
-static uint8_t* spriteData[12] = {nullptr};
+static const uint8_t* spriteData[12] = {nullptr};
+static uint8_t* spriteOverrides[12] = {nullptr};
 static bool spritesLoaded = false;
 
 static const char* SPRITE_FILES[12] = {
@@ -30,51 +32,63 @@ bool loadSprites() {
 
   SdMan.mkdir("/.crosspoint/chess/sprites");
 
+  // Default to embedded sprites (always available)
   for (int i = 0; i < 12; i++) {
-    spriteData[i] = (uint8_t*)malloc(PIECE_BYTES);
-    if (!spriteData[i]) {
-      Serial.printf("[CHESS] Failed to allocate memory for sprite %d\n", i + 1);
-      freeSprites();
-      return false;
-    }
+    spriteData[i] = EmbeddedChessSprites::SPRITES[i];
+    spriteOverrides[i] = nullptr;
+  }
 
+  Serial.println("[CHESS] Loaded embedded sprites");
+
+  int overridesLoaded = 0;
+
+  for (int i = 0; i < 12; i++) {
     FsFile file;
     if (!SdMan.openFileForRead("CHESS", SPRITE_FILES[i], file)) {
-      Serial.printf("[CHESS] Failed to open sprite: %s\n", SPRITE_FILES[i]);
-      freeSprites();
-      return false;
+      continue;
     }
 
     if (file.size() != PIECE_BYTES) {
-      Serial.printf("[CHESS] Invalid sprite size: %s (%d bytes, expected %d)\n",
-                   SPRITE_FILES[i], (int)file.size(), PIECE_BYTES);
+      Serial.printf("[CHESS] Invalid sprite size (using embedded): %s (%d bytes, expected %d)\n",
+                    SPRITE_FILES[i], (int)file.size(), PIECE_BYTES);
       file.close();
-      freeSprites();
-      return false;
+      continue;
     }
 
-    size_t bytesRead = file.read(spriteData[i], PIECE_BYTES);
+    uint8_t* buf = (uint8_t*)malloc(PIECE_BYTES);
+    if (!buf) {
+      Serial.printf("[CHESS] Failed to allocate override sprite %d (using embedded)\n", i + 1);
+      file.close();
+      continue;
+    }
+
+    size_t bytesRead = file.read(buf, PIECE_BYTES);
     file.close();
 
     if (bytesRead != PIECE_BYTES) {
-      Serial.printf("[CHESS] Failed to read sprite: %s (expected %d, got %d)\n",
-                   SPRITE_FILES[i], PIECE_BYTES, bytesRead);
-      freeSprites();
-      return false;
+      Serial.printf("[CHESS] Failed to read sprite (using embedded): %s (expected %d, got %d)\n",
+                    SPRITE_FILES[i], PIECE_BYTES, bytesRead);
+      free(buf);
+      continue;
     }
+
+    spriteOverrides[i] = buf;
+    spriteData[i] = spriteOverrides[i];
+    overridesLoaded++;
   }
 
   spritesLoaded = true;
-  Serial.printf("[CHESS] Loaded %d sprites (%d bytes)\n", 12, 12 * PIECE_BYTES);
+  Serial.printf("[CHESS] Loaded sprites: embedded=12 overrides=%d\n", overridesLoaded);
   return true;
 }
 
 void freeSprites() {
   for (int i = 0; i < 12; i++) {
-    if (spriteData[i]) {
-      free(spriteData[i]);
-      spriteData[i] = nullptr;
+    if (spriteOverrides[i]) {
+      free(spriteOverrides[i]);
+      spriteOverrides[i] = nullptr;
     }
+    spriteData[i] = EmbeddedChessSprites::SPRITES[i];
   }
   if (spritesLoaded) {
     spritesLoaded = false;

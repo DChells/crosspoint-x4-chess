@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace Chess {
@@ -135,8 +136,10 @@ struct Puzzle {
     uint16_t rating;
     BoardState position;
     std::vector<Move> solution;
+    std::string themes;
+    std::string opening;
     
-    static Puzzle fromRecord(const uint8_t* data);
+    static Puzzle fromRecord(const uint8_t* data, uint16_t recordSize);
 };
 
 struct PackHeader {

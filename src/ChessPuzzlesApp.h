@@ -65,6 +65,7 @@ class ChessPuzzlesApp final {
   std::string packPath;
   std::string packName;
   uint32_t puzzleCount = 0;
+  uint16_t packRecordSize = Chess::RECORD_SIZE;
   uint32_t currentPuzzleIndex = 0;
   uint32_t solvedCount = 0;
   

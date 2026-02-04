@@ -1,0 +1,77 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          cache: 'pip'
+
+      - name: Install PlatformIO
+        run: |
+          pip install --upgrade pip
+          pip install platformio
+
+      - name: Cache PlatformIO dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            .pio/build
+          key: ${{ runner.os }}-pio-${{ hashFiles('platformio.ini', 'src/**', 'lib/**') }}
+          restore-keys: |
+            ${{ runner.os }}-pio-
+
+      - name: Build firmware
+        run: pio run -e chess-puzzles
+
+      - name: Copy firmware binary
+        run: cp .pio/build/chess-puzzles/firmware.bin app.bin
+
+      - name: Create assets archive
+        run: |
+          mkdir -p assets-archive/.crosspoint/chess
+          cp -r assets/sprites assets-archive/.crosspoint/chess/
+          echo "Chess Puzzles App - Assets" > assets-archive/README.txt
+          echo "=============================" >> assets-archive/README.txt
+          echo "" >> assets-archive/README.txt
+          echo "Installation Instructions:" >> assets-archive/README.txt
+          echo "1. Unzip this archive to the root of your SD card" >> assets-archive/README.txt
+          echo "2. The files will be placed in /.crosspoint/chess/" >> assets-archive/README.txt
+          echo "3. Upload app.bin to your CrossPoint device using the File Transfer utility" >> assets-archive/README.txt
+          echo "4. On device: Home -> Apps -> Chess -> Install" >> assets-archive/README.txt
+          echo "" >> assets-archive/README.txt
+          echo "Directory Structure:" >> assets-archive/README.txt
+          echo "/.crosspoint/chess/sprites/ - Chess piece sprites" >> assets-archive/README.txt
+          cd assets-archive
+          zip -r ../assets.zip .crosspoint/ README.txt
+          cd ..
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            app.bin
+            assets.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

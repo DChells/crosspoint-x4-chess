@@ -1,0 +1,6 @@
+[submodule "open-x4-sdk"]
+	path = open-x4-sdk
+	url = https://github.com/open-x4-epaper/community-sdk.git
+[submodule "crosspoint-reader"]
+	path = crosspoint-reader
+	url = https://github.com/crosspoint-reader/crosspoint-reader.git

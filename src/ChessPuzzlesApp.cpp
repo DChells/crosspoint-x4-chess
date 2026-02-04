@@ -77,12 +77,12 @@ void ChessPuzzlesApp::onExit() {
 
 void ChessPuzzlesApp::loop() {
   if (currentMode == Mode::PackSelect) {
-    if (input_.wasPressed(HalGPIO::BTN_UP)) {
+    if (input_.wasPressed(HalGPIO::BTN_UP) || input_.wasPressed(HalGPIO::BTN_LEFT)) {
       if (packSelectorIndex > 0) {
         packSelectorIndex--;
         updateRequired = true;
       }
-    } else if (input_.wasPressed(HalGPIO::BTN_DOWN)) {
+    } else if (input_.wasPressed(HalGPIO::BTN_DOWN) || input_.wasPressed(HalGPIO::BTN_RIGHT)) {
       if (packSelectorIndex < static_cast<int>(availablePacks.size()) - 1) {
         packSelectorIndex++;
         updateRequired = true;
@@ -112,12 +112,12 @@ void ChessPuzzlesApp::loop() {
   }
 
   if (currentMode == Mode::PackMenu) {
-    if (input_.wasPressed(HalGPIO::BTN_UP)) {
+    if (input_.wasPressed(HalGPIO::BTN_UP) || input_.wasPressed(HalGPIO::BTN_LEFT)) {
       if (packMenuIndex > 0) {
         packMenuIndex--;
         updateRequired = true;
       }
-    } else if (input_.wasPressed(HalGPIO::BTN_DOWN)) {
+    } else if (input_.wasPressed(HalGPIO::BTN_DOWN) || input_.wasPressed(HalGPIO::BTN_RIGHT)) {
       if (packMenuIndex < PACK_MENU_ITEM_COUNT - 1) {
         packMenuIndex++;
         updateRequired = true;
@@ -163,12 +163,12 @@ void ChessPuzzlesApp::loop() {
   }
 
   if (currentMode == Mode::ThemeSelect) {
-    if (input_.wasPressed(HalGPIO::BTN_UP)) {
+    if (input_.wasPressed(HalGPIO::BTN_UP) || input_.wasPressed(HalGPIO::BTN_LEFT)) {
       if (themeSelectIndex > 0) {
         themeSelectIndex--;
         updateRequired = true;
       }
-    } else if (input_.wasPressed(HalGPIO::BTN_DOWN)) {
+    } else if (input_.wasPressed(HalGPIO::BTN_DOWN) || input_.wasPressed(HalGPIO::BTN_RIGHT)) {
       if (themeSelectIndex < static_cast<int>(availableThemes.size()) - 1) {
         themeSelectIndex++;
         updateRequired = true;
@@ -225,12 +225,12 @@ void ChessPuzzlesApp::loop() {
   }
 
   if (currentMode == Mode::InGameMenu) {
-    if (input_.wasPressed(HalGPIO::BTN_UP)) {
+    if (input_.wasPressed(HalGPIO::BTN_UP) || input_.wasPressed(HalGPIO::BTN_LEFT)) {
       if (inGameMenuIndex > 0) {
         inGameMenuIndex--;
         updateRequired = true;
       }
-    } else if (input_.wasPressed(HalGPIO::BTN_DOWN)) {
+    } else if (input_.wasPressed(HalGPIO::BTN_DOWN) || input_.wasPressed(HalGPIO::BTN_RIGHT)) {
       if (inGameMenuIndex < IN_GAME_MENU_ITEM_COUNT - 1) {
         inGameMenuIndex++;
         updateRequired = true;
@@ -300,38 +300,168 @@ void ChessPuzzlesApp::loop() {
   bool moved = false;
 
   if (!pieceSelected) {
-    // Navigate between player pieces
-    if (navigablePieces.empty()) {
-      // Edge case: no player pieces, do nothing
-    } else if (input_.wasPressed(HalGPIO::BTN_LEFT) || input_.wasPressed(HalGPIO::BTN_UP)) {
-      navigablePieceIndex = (navigablePieceIndex - 1 + navigablePieces.size()) % navigablePieces.size();
-      int sq = navigablePieces[navigablePieceIndex];
-      cursorFile = Chess::BoardState::fileOf(sq);
-      cursorRank = Chess::BoardState::rankOf(sq);
-      moved = true;
-    } else if (input_.wasPressed(HalGPIO::BTN_RIGHT) || input_.wasPressed(HalGPIO::BTN_DOWN)) {
-      navigablePieceIndex = (navigablePieceIndex + 1) % navigablePieces.size();
-      int sq = navigablePieces[navigablePieceIndex];
-      cursorFile = Chess::BoardState::fileOf(sq);
-      cursorRank = Chess::BoardState::rankOf(sq);
-      moved = true;
+    // Navigate between player pieces (screen-space grid navigation)
+    if (!navigablePieces.empty()) {
+      const bool goUp = input_.wasPressed(HalGPIO::BTN_UP);
+      const bool goDown = input_.wasPressed(HalGPIO::BTN_DOWN);
+      const bool goLeft = input_.wasPressed(HalGPIO::BTN_LEFT);
+      const bool goRight = input_.wasPressed(HalGPIO::BTN_RIGHT);
+
+      if (goUp || goDown || goLeft || goRight) {
+        const int curSq = cursorSquare();
+        const int curFile = Chess::BoardState::fileOf(curSq);
+        const int curRank = Chess::BoardState::rankOf(curSq);
+        const int curX = screenX(curFile) + SQUARE_SIZE / 2;
+        const int curY = screenY(curRank) + SQUARE_SIZE / 2;
+
+        int bestSq = -1;
+        int bestPrimary = 0;
+        int bestSecondary = 0;
+        bool found = false;
+
+        auto consider = [&](int sq, int primary, int secondary) {
+          if (!found || primary < bestPrimary || (primary == bestPrimary && secondary < bestSecondary) ||
+              (primary == bestPrimary && secondary == bestSecondary && sq < bestSq)) {
+            bestSq = sq;
+            bestPrimary = primary;
+            bestSecondary = secondary;
+            found = true;
+          }
+        };
+
+        auto scan = [&](bool wrap) {
+          found = false;
+
+          for (int sq : navigablePieces) {
+            if (sq == curSq) continue;
+            const int f = Chess::BoardState::fileOf(sq);
+            const int r = Chess::BoardState::rankOf(sq);
+            const int x = screenX(f) + SQUARE_SIZE / 2;
+            const int y = screenY(r) + SQUARE_SIZE / 2;
+            const int dx = x - curX;
+            const int dy = y - curY;
+
+            if (goUp) {
+              if (!wrap && dy >= 0) continue;
+              if (wrap && dy <= 0) continue;
+              consider(sq, wrap ? -dy : -dy, dx < 0 ? -dx : dx);
+            } else if (goDown) {
+              if (!wrap && dy <= 0) continue;
+              if (wrap && dy >= 0) continue;
+              consider(sq, wrap ? dy : dy, dx < 0 ? -dx : dx);
+            } else if (goLeft) {
+              if (!wrap && dx >= 0) continue;
+              if (wrap && dx <= 0) continue;
+              consider(sq, wrap ? -dx : -dx, dy < 0 ? -dy : dy);
+            } else if (goRight) {
+              if (!wrap && dx <= 0) continue;
+              if (wrap && dx >= 0) continue;
+              consider(sq, wrap ? dx : dx, dy < 0 ? -dy : dy);
+            }
+          }
+        };
+
+        scan(false);
+        if (!found) {
+          scan(true);
+        }
+
+        if (found) {
+          cursorFile = Chess::BoardState::fileOf(bestSq);
+          cursorRank = Chess::BoardState::rankOf(bestSq);
+          moved = true;
+
+          // Keep index in sync for non-directional consumers
+          for (size_t i = 0; i < navigablePieces.size(); i++) {
+            if (navigablePieces[i] == bestSq) {
+              navigablePieceIndex = static_cast<int>(i);
+              break;
+            }
+          }
+        }
+      }
     }
   } else {
-    // Navigate between legal move destinations
-    if (legalMovesFromSelected.empty()) {
-      // Edge case: no legal moves, do nothing
-    } else if (input_.wasPressed(HalGPIO::BTN_LEFT) || input_.wasPressed(HalGPIO::BTN_UP)) {
-      legalMoveNavIndex = (legalMoveNavIndex - 1 + legalMovesFromSelected.size()) % legalMovesFromSelected.size();
-      int destSq = legalMovesFromSelected[legalMoveNavIndex].to;
-      cursorFile = Chess::BoardState::fileOf(destSq);
-      cursorRank = Chess::BoardState::rankOf(destSq);
-      moved = true;
-    } else if (input_.wasPressed(HalGPIO::BTN_RIGHT) || input_.wasPressed(HalGPIO::BTN_DOWN)) {
-      legalMoveNavIndex = (legalMoveNavIndex + 1) % legalMovesFromSelected.size();
-      int destSq = legalMovesFromSelected[legalMoveNavIndex].to;
-      cursorFile = Chess::BoardState::fileOf(destSq);
-      cursorRank = Chess::BoardState::rankOf(destSq);
-      moved = true;
+    // Navigate between legal move destinations (screen-space grid navigation)
+    if (!legalMovesFromSelected.empty()) {
+      const bool goUp = input_.wasPressed(HalGPIO::BTN_UP);
+      const bool goDown = input_.wasPressed(HalGPIO::BTN_DOWN);
+      const bool goLeft = input_.wasPressed(HalGPIO::BTN_LEFT);
+      const bool goRight = input_.wasPressed(HalGPIO::BTN_RIGHT);
+
+      if (goUp || goDown || goLeft || goRight) {
+        const int curSq = cursorSquare();
+        const int curFile = Chess::BoardState::fileOf(curSq);
+        const int curRank = Chess::BoardState::rankOf(curSq);
+        const int curX = screenX(curFile) + SQUARE_SIZE / 2;
+        const int curY = screenY(curRank) + SQUARE_SIZE / 2;
+
+        int bestSq = -1;
+        int bestPrimary = 0;
+        int bestSecondary = 0;
+        bool found = false;
+
+        auto consider = [&](int sq, int primary, int secondary) {
+          if (!found || primary < bestPrimary || (primary == bestPrimary && secondary < bestSecondary) ||
+              (primary == bestPrimary && secondary == bestSecondary && sq < bestSq)) {
+            bestSq = sq;
+            bestPrimary = primary;
+            bestSecondary = secondary;
+            found = true;
+          }
+        };
+
+        auto scan = [&](bool wrap) {
+          found = false;
+
+          for (size_t i = 0; i < legalMovesFromSelected.size(); i++) {
+            const int sq = legalMovesFromSelected[i].to;
+            if (sq == curSq) continue;
+            const int f = Chess::BoardState::fileOf(sq);
+            const int r = Chess::BoardState::rankOf(sq);
+            const int x = screenX(f) + SQUARE_SIZE / 2;
+            const int y = screenY(r) + SQUARE_SIZE / 2;
+            const int dx = x - curX;
+            const int dy = y - curY;
+
+            if (goUp) {
+              if (!wrap && dy >= 0) continue;
+              if (wrap && dy <= 0) continue;
+              consider(sq, -dy, dx < 0 ? -dx : dx);
+            } else if (goDown) {
+              if (!wrap && dy <= 0) continue;
+              if (wrap && dy >= 0) continue;
+              consider(sq, dy, dx < 0 ? -dx : dx);
+            } else if (goLeft) {
+              if (!wrap && dx >= 0) continue;
+              if (wrap && dx <= 0) continue;
+              consider(sq, -dx, dy < 0 ? -dy : dy);
+            } else if (goRight) {
+              if (!wrap && dx <= 0) continue;
+              if (wrap && dx >= 0) continue;
+              consider(sq, dx, dy < 0 ? -dy : dy);
+            }
+          }
+        };
+
+        scan(false);
+        if (!found) {
+          scan(true);
+        }
+
+        if (found) {
+          cursorFile = Chess::BoardState::fileOf(bestSq);
+          cursorRank = Chess::BoardState::rankOf(bestSq);
+          moved = true;
+
+          for (size_t i = 0; i < legalMovesFromSelected.size(); i++) {
+            if (legalMovesFromSelected[i].to == bestSq) {
+              legalMoveNavIndex = static_cast<int>(i);
+              break;
+            }
+          }
+        }
+      }
     }
   }
 
@@ -409,7 +539,20 @@ void ChessPuzzlesApp::render() {
     } else if (puzzleFailed) {
       btn2Label = "Retry";
     }
-    renderer.drawButtonHints(UI_10_FONT_ID, "Menu", btn2Label, "<", ">");
+    renderer.drawButtonHints(UI_10_FONT_ID, "Menu (hold)", btn2Label, "<", ">");
+
+    // Long-press indicator above the Menu button.
+    {
+      const int screenHeight = renderer.getScreenHeight();
+      constexpr int buttonX = 25;
+      constexpr int buttonWidth = 106;
+      constexpr int buttonYFromBottom = 40;
+      const int buttonTopY = screenHeight - buttonYFromBottom;
+      const int cx = buttonX + buttonWidth / 2;
+      const int cy = buttonTopY - 8;
+      renderer.drawLine(cx - 6, cy - 4, cx, cy, true);
+      renderer.drawLine(cx + 6, cy - 4, cx, cy, true);
+    }
   }
   
   if (pendingFullRefresh) {
@@ -423,14 +566,24 @@ void ChessPuzzlesApp::render() {
 void ChessPuzzlesApp::renderInGameMenu() {
   auto& renderer = renderer_;
 
-  // Keep the current position visible behind the menu.
+  // Keep the board visible, but render the menu in the blank space below the board.
   renderBoard();
+  renderLegalMoveHints();
+  renderCursor();
 
   const int screenWidth = renderer.getScreenWidth();
-  const int panelWidth = 280;
-  const int panelHeight = 280;
+  const int screenHeight = renderer.getScreenHeight();
+
+  // drawButtonHints() uses a fixed 40px band at the bottom.
+  constexpr int hintBandHeight = 40;
+  constexpr int margin = 10;
+
+  const int maxPanelWidth = screenWidth - margin * 2;
+  const int panelWidth = maxPanelWidth < 280 ? maxPanelWidth : 280;
   const int panelX = (screenWidth - panelWidth) / 2;
-  const int panelY = BOARD_SIZE - panelHeight;
+
+  const int panelY = STATUS_Y;  // below board
+  const int panelHeight = (screenHeight - hintBandHeight - margin) - panelY;
 
   // Solid background so text stays readable on top of the board.
   renderer.fillRect(panelX, panelY, panelWidth, panelHeight);
@@ -442,9 +595,9 @@ void ChessPuzzlesApp::renderInGameMenu() {
   const char* items[] = {"Retry", "Skip", "Hint", "Refresh", "Exit"};
   constexpr int itemCount = IN_GAME_MENU_ITEM_COUNT;
 
-  const int itemStartY = panelY + 70;
-  const int itemLineHeight = 36;
-  const int itemTextX = panelX + 30;
+  const int itemStartY = panelY + 60;
+  const int itemLineHeight = 32;
+  const int itemTextX = panelX + 26;
 
   for (int i = 0; i < itemCount; i++) {
     const int y = itemStartY + i * itemLineHeight;
@@ -625,9 +778,55 @@ void ChessPuzzlesApp::renderStatus() {
              currentPuzzle.rating, currentPuzzleIndex + 1, puzzleCount);
     renderer.drawCenteredText(UI_10_FONT_ID, y + 25, ratingStr);
     
+    int infoY = y + 50;
+
     if (board.inCheck()) {
-      renderer.drawCenteredText(UI_10_FONT_ID, y + 50, "Check!");
+      renderer.drawCenteredText(UI_10_FONT_ID, infoY, "Check!");
+      infoY += 20;
     }
+
+    if (!packName.empty()) {
+      // Pack name is already trimmed of .cpz when loaded.
+      std::string packLine = "Pack: " + packName;
+      const int maxW = renderer.getScreenWidth() - 20;
+      if (renderer.getTextWidth(UI_10_FONT_ID, packLine.c_str()) > maxW) {
+        packLine = renderer.truncatedText(UI_10_FONT_ID, packLine.c_str(), maxW);
+      }
+      renderer.drawCenteredText(UI_10_FONT_ID, infoY, packLine.c_str());
+      infoY += 20;
+    }
+
+    if (!activeTheme.empty()) {
+      std::string themeLine = "Theme: " + activeTheme;
+      const int maxW = renderer.getScreenWidth() - 20;
+      if (renderer.getTextWidth(UI_10_FONT_ID, themeLine.c_str()) > maxW) {
+        themeLine = renderer.truncatedText(UI_10_FONT_ID, themeLine.c_str(), maxW);
+      }
+      renderer.drawCenteredText(UI_10_FONT_ID, infoY, themeLine.c_str());
+      infoY += 20;
+    }
+
+    if (!currentPuzzle.themes.empty()) {
+      std::string themesLine = "Themes: " + currentPuzzle.themes;
+      const int maxW = renderer.getScreenWidth() - 20;
+      if (renderer.getTextWidth(UI_10_FONT_ID, themesLine.c_str()) > maxW) {
+        themesLine = renderer.truncatedText(UI_10_FONT_ID, themesLine.c_str(), maxW);
+      }
+      renderer.drawCenteredText(UI_10_FONT_ID, infoY, themesLine.c_str());
+      infoY += 20;
+    }
+
+    if (!currentPuzzle.opening.empty()) {
+      std::string openingLine = "Opening: " + currentPuzzle.opening;
+      const int maxW = renderer.getScreenWidth() - 20;
+      if (renderer.getTextWidth(UI_10_FONT_ID, openingLine.c_str()) > maxW) {
+        openingLine = renderer.truncatedText(UI_10_FONT_ID, openingLine.c_str(), maxW);
+      }
+      renderer.drawCenteredText(UI_10_FONT_ID, infoY, openingLine.c_str());
+      infoY += 20;
+    }
+
+    renderer.drawCenteredText(UI_10_FONT_ID, infoY, "Hold Menu for options");
   }
 }
 
@@ -735,6 +934,12 @@ bool ChessPuzzlesApp::loadPackInfo() {
   }
   
   puzzleCount = packHeader.puzzleCount;
+  // Allow pack files to evolve record size while keeping backward compatibility.
+  packRecordSize = packHeader.recordSize;
+  if (packRecordSize < Chess::RECORD_SIZE || packRecordSize > 1024) {
+    Serial.printf("[CHESS] Invalid record size %d; using default %d\n", packRecordSize, Chess::RECORD_SIZE);
+    packRecordSize = Chess::RECORD_SIZE;
+  }
   Serial.printf("[CHESS] Loaded pack with %d puzzles (rating %d-%d)\n", 
                 puzzleCount, packHeader.ratingMin, packHeader.ratingMax);
   return true;
@@ -750,20 +955,21 @@ bool ChessPuzzlesApp::loadPuzzleFromPack(uint32_t index) {
     return false;
   }
   
-  uint32_t offset = Chess::PACK_HEADER_SIZE + index * Chess::RECORD_SIZE;
+  uint32_t offset = Chess::PACK_HEADER_SIZE + index * packRecordSize;
   if (!file.seek(offset)) {
     file.close();
     return false;
   }
   
-  uint8_t record[Chess::RECORD_SIZE];
-  if (file.read(record, Chess::RECORD_SIZE) != Chess::RECORD_SIZE) {
+  std::vector<uint8_t> record;
+  record.resize(packRecordSize);
+  if (file.read(record.data(), packRecordSize) != packRecordSize) {
     file.close();
     return false;
   }
   file.close();
   
-  currentPuzzle = Chess::Puzzle::fromRecord(record);
+  currentPuzzle = Chess::Puzzle::fromRecord(record.data(), packRecordSize);
   currentPuzzleIndex = index;
   
   board = currentPuzzle.position;
@@ -825,6 +1031,8 @@ void ChessPuzzlesApp::loadDemoPuzzle() {
   currentPuzzle.rating = 1200;
   currentPuzzle.position = board;
   currentPuzzle.solution.clear();
+  currentPuzzle.themes.clear();
+  currentPuzzle.opening.clear();
   currentPuzzle.solution.push_back(Chess::Move(
     Chess::BoardState::makeSquare(5, 2),
     Chess::BoardState::makeSquare(4, 4)

@@ -10,6 +10,15 @@ namespace {
     const int BISHOP_DIRS[] = {-9, -7, 7, 9};
     const int ROOK_DIRS[] = {-8, -1, 1, 8};
     const int QUEEN_DIRS[] = {-9, -8, -7, -1, 1, 7, 8, 9};
+
+    std::string readRecordField(const uint8_t* data, size_t offset, size_t maxLen) {
+        const char* start = reinterpret_cast<const char*>(data + offset);
+        size_t len = 0;
+        while (len < maxLen && start[len] != '\0') {
+            ++len;
+        }
+        return std::string(start, len);
+    }
 }
 
 BoardState::BoardState() {
@@ -451,7 +460,7 @@ BoardState BoardState::fromPacked(const uint8_t* data) {
     return state;
 }
 
-Puzzle Puzzle::fromRecord(const uint8_t* data) {
+Puzzle Puzzle::fromRecord(const uint8_t* data, uint16_t recordSize) {
     Puzzle puzzle;
     
     puzzle.rating = data[0] | (data[1] << 8);
@@ -468,6 +477,13 @@ Puzzle Puzzle::fromRecord(const uint8_t* data) {
         int offset = 36 + i * 2;
         uint16_t packed = data[offset] | (data[offset + 1] << 8);
         puzzle.solution.push_back(Move::unpack(packed));
+    }
+
+    puzzle.themes.clear();
+    puzzle.opening.clear();
+    if (recordSize >= 128) {
+        puzzle.themes = readRecordField(data, 84, 32);
+        puzzle.opening = readRecordField(data, 116, 12);
     }
     
     return puzzle;
