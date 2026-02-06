@@ -6,17 +6,17 @@ This repo is meant to be developed and released independently of the main CrossP
 
 ## Build
 
-Recommended SDK: `https://github.com/open-x4-epaper/community-sdk`
+This repo uses PlatformIO.
 
 Typical setup:
 
-1. Add the SDK as a submodule:
+1. Init submodules:
    ```bash
-   git submodule add https://github.com/open-x4-epaper/community-sdk.git open-x4-sdk
+   git submodule update --init --recursive
    ```
 2. Build with PlatformIO:
    ```bash
-   pio run
+   pio run -e chess-puzzles
    ```
 
 The output binary is typically:
@@ -45,4 +45,40 @@ Puzzle packs:
 
 `/.crosspoint/chess/packs/*.cpz`
 
+Theme index (optional, enables theme selection UI):
+
+`/.crosspoint/chess/index/<packName>/theme_<theme>.bit`
+
 For end-user distribution, the recommended approach is to publish an `assets.zip` that unpacks to `/.crosspoint/chess/`.
+
+This repo includes a small starter pack:
+
+- `assets/packs/starter.cpz`
+- `assets/index/starter/*.bit`
+
+## Generate Puzzle Packs (Lichess)
+
+This app can consume packs generated from the public Lichess puzzle database CSV (`lichess_db_puzzle.csv`).
+
+Tooling:
+
+- `tools/pack_lichess_cpz.py` - builds a `.cpz` pack (CPZ1) and optional theme bitsets
+- `tools/inspect_cpz.py` - quick validation/debug output
+
+Examples:
+
+Generate a pack from Lichess CSV:
+```bash
+python3 tools/pack_lichess_cpz.py \
+  --input lichess_db_puzzle.csv \
+  --output assets/packs/lichess_1400_1600.cpz \
+  --out-dir assets \
+  --min-rating 1400 \
+  --max-rating 1600 \
+  --limit 2000
+```
+
+Generate the built-in starter pack:
+```bash
+python3 tools/pack_lichess_cpz.py --starter --output assets/packs/starter.cpz --out-dir assets
+```

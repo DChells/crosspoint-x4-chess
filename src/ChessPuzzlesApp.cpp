@@ -43,6 +43,11 @@ void ChessPuzzlesApp::onEnter() {
     return;
   }
 
+  // Ensure expected SD directory structure exists.
+  SdMan.mkdir("/.crosspoint/chess/packs");
+  SdMan.mkdir("/.crosspoint/chess/index");
+  SdMan.mkdir("/.crosspoint/chess/progress");
+
   if (!ChessSprites::loadSprites()) {
     Serial.println("[CHESS] Failed to load sprites from SD card");
   }

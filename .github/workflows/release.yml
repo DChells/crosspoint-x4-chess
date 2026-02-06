@@ -53,6 +53,8 @@ jobs:
         run: |
           mkdir -p assets-archive/.crosspoint/chess
           cp -r assets/sprites assets-archive/.crosspoint/chess/
+          cp -r assets/packs assets-archive/.crosspoint/chess/
+          cp -r assets/index assets-archive/.crosspoint/chess/
           echo "Chess Puzzles App - Assets" > assets-archive/README.txt
           echo "=============================" >> assets-archive/README.txt
           echo "" >> assets-archive/README.txt
