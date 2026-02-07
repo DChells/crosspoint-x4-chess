@@ -27,6 +27,7 @@ from PIL import Image
 PIECE_SIZE = 60
 PIECE_BYTES = (PIECE_SIZE * PIECE_SIZE + 7) // 8
 RENDER_SIZE = 240
+PADDING = 4
 
 
 RAW_SVGS: dict[str, str] = {
@@ -77,7 +78,15 @@ def _render_filled_mask(svg_view_box: str, paths: list[str]) -> list[list[bool]]
     )
     png = svg2png(bytestring=svg.encode("utf-8"), output_width=RENDER_SIZE, output_height=RENDER_SIZE, background_color="white")
     img = Image.open(__import__("io").BytesIO(png)).convert("L")
-    img = img.resize((PIECE_SIZE, PIECE_SIZE), resample=Image.Resampling.LANCZOS)
+
+    inner = PIECE_SIZE - (PADDING * 2)
+    if inner <= 0:
+        raise ValueError("Padding too large")
+
+    # Downsample to a slightly smaller sprite, then center it into a 60x60 canvas.
+    img_small = img.resize((inner, inner), resample=Image.Resampling.LANCZOS)
+    img = Image.new("L", (PIECE_SIZE, PIECE_SIZE), 255)
+    img.paste(img_small, (PADDING, PADDING))
 
     # Black pixels -> True
     px = list(img.getdata())
