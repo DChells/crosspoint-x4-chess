@@ -11,6 +11,7 @@
 #include <esp_system.h>
 
 #include <algorithm>
+#include <cstdarg>
 
 #include "ChessSprites.h"
 #include "fontIds.h"
@@ -80,6 +81,46 @@ void ChessPuzzlesApp::onExit() {
   ChessSprites::freeSprites();
 }
 
+void ChessPuzzlesApp::logEvent(const char* ev, const char* fmt, ...) const {
+  char msg[196];
+  msg[0] = '\0';
+
+  if (fmt) {
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(msg, sizeof(msg), fmt, args);
+    va_end(args);
+  }
+
+  if (msg[0] != '\0') {
+    Serial.printf("[%lu] [CHESS] %s %s\n", millis(), ev, msg);
+  } else {
+    Serial.printf("[%lu] [CHESS] %s\n", millis(), ev);
+  }
+}
+
+void ChessPuzzlesApp::logModeChange(Mode from, Mode to, const char* reason) {
+  auto modeName = [](Mode m) {
+    switch (m) {
+      case Mode::PackSelect:
+        return "PackSelect";
+      case Mode::PackMenu:
+        return "PackMenu";
+      case Mode::ThemeSelect:
+        return "ThemeSelect";
+      case Mode::Browsing:
+        return "Browsing";
+      case Mode::Playing:
+        return "Playing";
+      case Mode::InGameMenu:
+        return "InGameMenu";
+    }
+    return "?";
+  };
+
+  logEvent("MODE", "%s -> %s (%s)", modeName(from), modeName(to), reason ? reason : "");
+}
+
 void ChessPuzzlesApp::loop() {
   if (currentMode == Mode::PackSelect) {
     if (input_.wasPressed(HalGPIO::BTN_UP) || input_.wasPressed(HalGPIO::BTN_LEFT)) {
@@ -103,14 +144,18 @@ void ChessPuzzlesApp::loop() {
           loadSolvedBitset();
           countSolvedPuzzles();
           packMenuIndex = 0;
+          logModeChange(currentMode, Mode::PackMenu, "pack opened");
           currentMode = Mode::PackMenu;
         } else {
           loadDemoPuzzle();
+          logModeChange(currentMode, Mode::Playing, "demo puzzle");
           currentMode = Mode::Playing;
         }
+        logEvent("PACK", "name=%s", packName.c_str());
         updateRequired = true;
       }
     } else if (input_.wasReleased(HalGPIO::BTN_BACK)) {
+      logEvent("EXIT", "from=PackSelect");
       returnToLauncher();
     }
     return;
@@ -134,20 +179,23 @@ void ChessPuzzlesApp::loop() {
           if (savedIndex >= puzzleCount) savedIndex = 0;
           activeTheme.clear();
           themeBitset.clear();
-          if (loadPuzzleFromPack(savedIndex)) {
-            currentMode = Mode::Playing;
-          }
-          break;
-        }
+           if (loadPuzzleFromPack(savedIndex)) {
+             logModeChange(currentMode, Mode::Playing, "continue");
+             currentMode = Mode::Playing;
+           }
+           break;
+         }
         case PackMenuItem::Random:
           activeTheme.clear();
           themeBitset.clear();
           loadRandomPuzzle();
+          logModeChange(currentMode, Mode::Playing, "random");
           currentMode = Mode::Playing;
           break;
         case PackMenuItem::Themes:
           loadAvailableThemes();
           themeSelectIndex = 0;
+          logModeChange(currentMode, Mode::ThemeSelect, "themes");
           currentMode = Mode::ThemeSelect;
           break;
         case PackMenuItem::Browse: {
@@ -155,12 +203,14 @@ void ChessPuzzlesApp::loop() {
           if (browserIndex >= puzzleCount) browserIndex = 0;
           activeTheme.clear();
           themeBitset.clear();
+          logModeChange(currentMode, Mode::Browsing, "browse");
           currentMode = Mode::Browsing;
           break;
         }
       }
       updateRequired = true;
     } else if (input_.wasReleased(HalGPIO::BTN_BACK)) {
+      logModeChange(currentMode, Mode::PackSelect, "back");
       currentMode = Mode::PackSelect;
       updateRequired = true;
     }
@@ -183,10 +233,13 @@ void ChessPuzzlesApp::loop() {
         activeTheme = availableThemes[themeSelectIndex];
         loadThemeBitset(activeTheme);
         loadRandomThemedPuzzle();
+        logEvent("THEME", "selected=%s", activeTheme.c_str());
+        logModeChange(currentMode, Mode::Playing, "theme selected");
         currentMode = Mode::Playing;
         updateRequired = true;
       }
     } else if (input_.wasReleased(HalGPIO::BTN_BACK)) {
+      logModeChange(currentMode, Mode::PackMenu, "back");
       currentMode = Mode::PackMenu;
       updateRequired = true;
     }
@@ -219,10 +272,12 @@ void ChessPuzzlesApp::loop() {
       updateRequired = true;
     } else if (input_.wasReleased(HalGPIO::BTN_CONFIRM)) {
       if (loadPuzzleFromPack(browserIndex)) {
+        logModeChange(currentMode, Mode::Playing, "browse play");
         currentMode = Mode::Playing;
         updateRequired = true;
       }
     } else if (input_.wasReleased(HalGPIO::BTN_BACK)) {
+      logModeChange(currentMode, Mode::PackMenu, "back");
       currentMode = Mode::PackMenu;
       updateRequired = true;
     }
@@ -244,6 +299,7 @@ void ChessPuzzlesApp::loop() {
       switch (static_cast<InGameMenuItem>(inGameMenuIndex)) {
         case InGameMenuItem::Retry:
           loadPuzzleFromPack(currentPuzzleIndex);
+          logModeChange(currentMode, Mode::Playing, "retry");
           currentMode = Mode::Playing;
           break;
         case InGameMenuItem::Skip:
@@ -252,30 +308,42 @@ void ChessPuzzlesApp::loop() {
           } else {
             loadNextPuzzle();
           }
+          logModeChange(currentMode, Mode::Playing, "skip");
           currentMode = Mode::Playing;
           break;
         case InGameMenuItem::Hint:
           hintActive = true;
+          logEvent("HINT", "active=1");
           currentMode = Mode::Playing;
           break;
         case InGameMenuItem::RefreshScreen:
           triggerFullRefresh();
+          logModeChange(currentMode, Mode::Playing, "refresh");
           currentMode = Mode::Playing;
           break;
         case InGameMenuItem::Exit:
+          logModeChange(currentMode, Mode::PackMenu, "exit to pack menu");
           currentMode = Mode::PackMenu;
           break;
       }
       updateRequired = true;
-    } else if (input_.wasPressed(HalGPIO::BTN_BACK)) {
-      currentMode = Mode::Playing;
-      updateRequired = true;
+    } else if (input_.wasReleased(HalGPIO::BTN_BACK)) {
+      if (ignoreBackRelease) {
+        ignoreBackRelease = false;
+        logEvent("BACK", "ignored release after hold");
+      } else {
+        logModeChange(currentMode, Mode::Playing, "back");
+        currentMode = Mode::Playing;
+        updateRequired = true;
+      }
     }
     return;
   }
 
   if (input_.isPressed(HalGPIO::BTN_BACK) && input_.getHeldTime() >= IN_GAME_MENU_HOLD_MS) {
     inGameMenuIndex = 0;
+    ignoreBackRelease = true;
+    logModeChange(currentMode, Mode::InGameMenu, "hold menu");
     currentMode = Mode::InGameMenu;
     updateRequired = true;
     return;
@@ -535,6 +603,7 @@ void ChessPuzzlesApp::render() {
   } else {
     renderBoard();
     renderLegalMoveHints();
+    renderHint();
     renderCursor();
     renderStatus();
     
@@ -568,6 +637,59 @@ void ChessPuzzlesApp::render() {
   }
 }
 
+void ChessPuzzlesApp::renderHint() {
+  auto& renderer = renderer_;
+
+  if (!hintActive) return;
+  if (puzzleSolved || puzzleFailed) return;
+  if (currentMoveIndex < 0 || currentMoveIndex >= static_cast<int>(currentPuzzle.solution.size())) return;
+
+  const Chess::Move& m = currentPuzzle.solution[currentMoveIndex];
+
+  auto drawBox = [&](int sq, int thickness, bool fullBox) {
+    const int file = Chess::BoardState::fileOf(sq);
+    const int rank = Chess::BoardState::rankOf(sq);
+    const int x = screenX(file);
+    const int y = screenY(rank);
+
+    const bool squareIsLight = (file + rank) % 2 == 1;
+    const bool color = squareIsLight;
+
+    if (fullBox) {
+      for (int t = 0; t < thickness; t++) {
+        renderer.drawLine(x + t, y + t, x + SQUARE_SIZE - 1 - t, y + t, color);
+        renderer.drawLine(x + t, y + SQUARE_SIZE - 1 - t, x + SQUARE_SIZE - 1 - t,
+                          y + SQUARE_SIZE - 1 - t, color);
+        renderer.drawLine(x + t, y + t, x + t, y + SQUARE_SIZE - 1 - t, color);
+        renderer.drawLine(x + SQUARE_SIZE - 1 - t, y + t, x + SQUARE_SIZE - 1 - t,
+                          y + SQUARE_SIZE - 1 - t, color);
+      }
+      return;
+    }
+
+    constexpr int cornerLen = 18;
+    for (int t = 0; t < thickness; t++) {
+      renderer.drawLine(x + t, y, x + t, y + cornerLen, color);
+      renderer.drawLine(x, y + t, x + cornerLen, y + t, color);
+
+      renderer.drawLine(x + SQUARE_SIZE - 1 - t, y, x + SQUARE_SIZE - 1 - t, y + cornerLen, color);
+      renderer.drawLine(x + SQUARE_SIZE - cornerLen, y + t, x + SQUARE_SIZE - 1, y + t, color);
+
+      renderer.drawLine(x + t, y + SQUARE_SIZE - cornerLen, x + t, y + SQUARE_SIZE - 1, color);
+      renderer.drawLine(x, y + SQUARE_SIZE - 1 - t, x + cornerLen, y + SQUARE_SIZE - 1 - t, color);
+
+      renderer.drawLine(x + SQUARE_SIZE - 1 - t, y + SQUARE_SIZE - cornerLen,
+                        x + SQUARE_SIZE - 1 - t, y + SQUARE_SIZE - 1, color);
+      renderer.drawLine(x + SQUARE_SIZE - cornerLen, y + SQUARE_SIZE - 1 - t,
+                        x + SQUARE_SIZE - 1, y + SQUARE_SIZE - 1 - t, color);
+    }
+  };
+
+  // From: bracket corners. To: full box.
+  drawBox(m.from, 4, false);
+  drawBox(m.to, 3, true);
+}
+
 void ChessPuzzlesApp::renderInGameMenu() {
   auto& renderer = renderer_;
 
@@ -583,12 +705,20 @@ void ChessPuzzlesApp::renderInGameMenu() {
   constexpr int hintBandHeight = 40;
   constexpr int margin = 10;
 
-  const int maxPanelWidth = screenWidth - margin * 2;
-  const int panelWidth = maxPanelWidth < 280 ? maxPanelWidth : 280;
-  const int panelX = (screenWidth - panelWidth) / 2;
+  const int maxPanelWidth = (screenWidth - margin * 2);
+  const int boardWidth = (BOARD_SIZE < screenWidth) ? BOARD_SIZE : screenWidth;
+  const int desiredPanelWidth = boardWidth - margin * 2;
+  const int panelWidth = (desiredPanelWidth < maxPanelWidth) ? desiredPanelWidth : maxPanelWidth;
+  const int panelX = (screenWidth > BOARD_SIZE) ? (BOARD_OFFSET_X + (BOARD_SIZE - panelWidth) / 2)
+                                                : ((screenWidth - panelWidth) / 2);
 
-  const int panelY = STATUS_Y;  // below board
-  const int panelHeight = (screenHeight - hintBandHeight - margin) - panelY;
+  const int blankTop = STATUS_Y;
+  const int blankBottom = screenHeight - hintBandHeight - margin;
+  const int availableHeight = blankBottom - blankTop;
+  constexpr int itemLineHeight = 32;
+  const int desiredHeight = 60 + (IN_GAME_MENU_ITEM_COUNT * itemLineHeight) + 46;
+  const int panelHeight = (desiredHeight < availableHeight) ? desiredHeight : availableHeight;
+  const int panelY = blankTop + (availableHeight - panelHeight) / 2;
 
   // Solid background so text stays readable on top of the board.
   renderer.fillRect(panelX, panelY, panelWidth, panelHeight);
@@ -601,7 +731,6 @@ void ChessPuzzlesApp::renderInGameMenu() {
   constexpr int itemCount = IN_GAME_MENU_ITEM_COUNT;
 
   const int itemStartY = panelY + 60;
-  const int itemLineHeight = 32;
   const int itemTextX = panelX + 26;
 
   for (int i = 0; i < itemCount; i++) {
@@ -778,60 +907,36 @@ void ChessPuzzlesApp::renderStatus() {
     const char* toMove = board.whiteToMove ? "White to move" : "Black to move";
     renderer.drawCenteredText(UI_10_FONT_ID, y, toMove);
     
-    char ratingStr[32];
-    snprintf(ratingStr, sizeof(ratingStr), "Rating: %d  (%d/%d)", 
-             currentPuzzle.rating, currentPuzzleIndex + 1, puzzleCount);
-    renderer.drawCenteredText(UI_10_FONT_ID, y + 25, ratingStr);
-    
-    int infoY = y + 50;
+    // Keep the status block compact; the blank area is limited.
+    {
+      std::string pack = packName.empty() ? "(no pack)" : packName;
+      const int idx = static_cast<int>(currentPuzzleIndex) + 1;
+      const int total = static_cast<int>(puzzleCount);
 
-    if (board.inCheck()) {
-      renderer.drawCenteredText(UI_10_FONT_ID, infoY, "Check!");
-      infoY += 20;
-    }
+      char line2[96];
+      snprintf(line2, sizeof(line2), "%s  %d/%d  r%d", pack.c_str(), idx, total, currentPuzzle.rating);
+      renderer.drawCenteredText(UI_10_FONT_ID, y + 25, line2);
 
-    if (!packName.empty()) {
-      // Pack name is already trimmed of .cpz when loaded.
-      std::string packLine = "Pack: " + packName;
-      const int maxW = renderer.getScreenWidth() - 20;
-      if (renderer.getTextWidth(UI_10_FONT_ID, packLine.c_str()) > maxW) {
-        packLine = renderer.truncatedText(UI_10_FONT_ID, packLine.c_str(), maxW);
+      int infoY = y + 50;
+      if (board.inCheck()) {
+        renderer.drawCenteredText(UI_10_FONT_ID, infoY, "Check!");
+        infoY += 20;
       }
-      renderer.drawCenteredText(UI_10_FONT_ID, infoY, packLine.c_str());
-      infoY += 20;
-    }
 
-    if (!activeTheme.empty()) {
-      std::string themeLine = "Theme: " + activeTheme;
-      const int maxW = renderer.getScreenWidth() - 20;
-      if (renderer.getTextWidth(UI_10_FONT_ID, themeLine.c_str()) > maxW) {
-        themeLine = renderer.truncatedText(UI_10_FONT_ID, themeLine.c_str(), maxW);
+      if (!activeTheme.empty()) {
+        std::string prettyTheme = activeTheme;
+        std::replace(prettyTheme.begin(), prettyTheme.end(), '_', ' ');
+        std::string themeLine = "Theme: " + prettyTheme;
+        const int maxW = renderer.getScreenWidth() - 20;
+        if (renderer.getTextWidth(UI_10_FONT_ID, themeLine.c_str()) > maxW) {
+          themeLine = renderer.truncatedText(UI_10_FONT_ID, themeLine.c_str(), maxW);
+        }
+        renderer.drawCenteredText(UI_10_FONT_ID, infoY, themeLine.c_str());
+        infoY += 20;
       }
-      renderer.drawCenteredText(UI_10_FONT_ID, infoY, themeLine.c_str());
-      infoY += 20;
-    }
 
-    if (!currentPuzzle.themes.empty()) {
-      std::string themesLine = "Themes: " + currentPuzzle.themes;
-      const int maxW = renderer.getScreenWidth() - 20;
-      if (renderer.getTextWidth(UI_10_FONT_ID, themesLine.c_str()) > maxW) {
-        themesLine = renderer.truncatedText(UI_10_FONT_ID, themesLine.c_str(), maxW);
-      }
-      renderer.drawCenteredText(UI_10_FONT_ID, infoY, themesLine.c_str());
-      infoY += 20;
+      renderer.drawCenteredText(UI_10_FONT_ID, infoY, "Hold Menu for options");
     }
-
-    if (!currentPuzzle.opening.empty()) {
-      std::string openingLine = "Opening: " + currentPuzzle.opening;
-      const int maxW = renderer.getScreenWidth() - 20;
-      if (renderer.getTextWidth(UI_10_FONT_ID, openingLine.c_str()) > maxW) {
-        openingLine = renderer.truncatedText(UI_10_FONT_ID, openingLine.c_str(), maxW);
-      }
-      renderer.drawCenteredText(UI_10_FONT_ID, infoY, openingLine.c_str());
-      infoY += 20;
-    }
-
-    renderer.drawCenteredText(UI_10_FONT_ID, infoY, "Hold Menu for options");
   }
 }
 
@@ -1092,22 +1197,33 @@ bool ChessPuzzlesApp::tryMove(const Chess::Move& move) {
 }
 
 void ChessPuzzlesApp::handlePlayerMove(const Chess::Move& move) {
+  // Hint is single-use: once the user attempts a move, clear it.
+  hintActive = false;
+
   if (currentMoveIndex >= static_cast<int>(currentPuzzle.solution.size())) {
+    logEvent("MOVE", "attempt=%d->%d unexpected=end_of_solution", move.from, move.to);
     onPuzzleFailed();
     return;
   }
   
   const Chess::Move& expectedMove = currentPuzzle.solution[currentMoveIndex];
-  
+
   if (move.from != expectedMove.from || move.to != expectedMove.to) {
+    logEvent("MOVE", "attempt=%d->%d expected=%d->%d result=mismatch", move.from, move.to,
+             expectedMove.from, expectedMove.to);
     onPuzzleFailed();
     return;
   }
-  
+
   if (!tryMove(move)) {
+    logEvent("MOVE", "attempt=%d->%d expected=%d->%d result=illegal", move.from, move.to,
+             expectedMove.from, expectedMove.to);
     onPuzzleFailed();
     return;
   }
+
+  logEvent("MOVE", "attempt=%d->%d expected=%d->%d result=ok", move.from, move.to,
+           expectedMove.from, expectedMove.to);
   
   deselectPiece();
   currentMoveIndex++;
@@ -1119,6 +1235,7 @@ void ChessPuzzlesApp::handlePlayerMove(const Chess::Move& move) {
   }
   
   if (currentMoveIndex >= static_cast<int>(currentPuzzle.solution.size())) {
+    logEvent("PUZZLE", "solved=1 index=%lu", static_cast<unsigned long>(currentPuzzleIndex));
     onPuzzleSolved();
     return;
   }
@@ -1211,7 +1328,7 @@ std::string ChessPuzzlesApp::getProgressPath() const {
   if (packName.size() > 4 && packName.substr(packName.size() - 4) == ".cpz") {
     packName = packName.substr(0, packName.size() - 4);
   }
-  return "/.crosspoint/chess/progress_" + packName + ".bin";
+  return "/.crosspoint/chess/progress/" + packName + ".bin";
 }
 
 void ChessPuzzlesApp::saveProgress() {
@@ -1237,12 +1354,33 @@ void ChessPuzzlesApp::saveProgress() {
 
 uint32_t ChessPuzzlesApp::loadProgress() {
   if (packPath.empty()) return 0;
-  
+
   FsFile file;
   std::string progressPath = getProgressPath();
   if (!SdMan.openFileForRead("CHESS", progressPath, file)) {
-    Serial.printf("[CHESS] No saved progress found at %s\n", progressPath.c_str());
-    return 0;
+    // Backward compatibility: older versions stored progress at the root chess folder.
+    std::string legacyPath = "/.crosspoint/chess/progress_";
+    {
+      std::string packName;
+      size_t lastSlash = packPath.rfind('/');
+      if (lastSlash != std::string::npos) {
+        packName = packPath.substr(lastSlash + 1);
+      } else {
+        packName = packPath;
+      }
+      if (packName.size() > 4 && packName.substr(packName.size() - 4) == ".cpz") {
+        packName = packName.substr(0, packName.size() - 4);
+      }
+      legacyPath += packName;
+    }
+    legacyPath += ".bin";
+
+    if (!SdMan.openFileForRead("CHESS", legacyPath, file)) {
+      Serial.printf("[CHESS] No saved progress found at %s\n", progressPath.c_str());
+      return 0;
+    }
+
+    Serial.printf("[CHESS] Loaded legacy progress from %s\n", legacyPath.c_str());
   }
   
   uint8_t data[4];
@@ -1583,9 +1721,8 @@ void ChessPuzzlesApp::renderThemeSelect() {
     constexpr int startY = 100;
     constexpr int lineHeight = 28;
     constexpr int maxVisible = 14;
-    constexpr int itemWidth = 300;
-    
     int screenWidth = renderer.getScreenWidth();
+    const int itemWidth = (screenWidth - 80) < 360 ? (screenWidth - 80) : 360;
     int listX = (screenWidth - itemWidth) / 2;
     
     int startIdx = 0;
@@ -1598,12 +1735,14 @@ void ChessPuzzlesApp::renderThemeSelect() {
       int y = startY + i * lineHeight;
       
       const std::string& theme = availableThemes[idx];
+      std::string prettyTheme = theme;
+      std::replace(prettyTheme.begin(), prettyTheme.end(), '_', ' ');
       
       if (idx == themeSelectIndex) {
         renderer.fillRect(listX, y - 2, itemWidth, lineHeight - 4);
-        renderer.drawText(UI_12_FONT_ID, listX + 10, y, theme.c_str(), false);
+        renderer.drawText(UI_10_FONT_ID, listX + 10, y, prettyTheme.c_str(), false);
       } else {
-        renderer.drawText(UI_10_FONT_ID, listX + 10, y, theme.c_str(), true);
+        renderer.drawText(UI_10_FONT_ID, listX + 10, y, prettyTheme.c_str(), true);
       }
     }
     
@@ -1628,6 +1767,42 @@ void ChessPuzzlesApp::renderSdCardError() {
 }
 
 void ChessPuzzlesApp::returnToLauncher() {
-  esp_ota_set_boot_partition(esp_ota_get_next_update_partition(NULL));
+  const esp_partition_t* running = esp_ota_get_running_partition();
+  const esp_partition_t* target = nullptr;
+
+  esp_partition_subtype_t runningSubtype = running ? running->subtype : static_cast<esp_partition_subtype_t>(0);
+  esp_partition_subtype_t targetSubtype = static_cast<esp_partition_subtype_t>(0);
+
+  if (runningSubtype == ESP_PARTITION_SUBTYPE_APP_OTA_0) {
+    targetSubtype = ESP_PARTITION_SUBTYPE_APP_OTA_1;
+    target = esp_partition_find_first(ESP_PARTITION_TYPE_APP, targetSubtype, nullptr);
+  } else if (runningSubtype == ESP_PARTITION_SUBTYPE_APP_OTA_1) {
+    targetSubtype = ESP_PARTITION_SUBTYPE_APP_OTA_0;
+    target = esp_partition_find_first(ESP_PARTITION_TYPE_APP, targetSubtype, nullptr);
+  } else {
+    Serial.printf("[CHESS] Running partition subtype not ota_0/ota_1 (%d); falling back to next update partition\n", static_cast<int>(runningSubtype));
+  }
+
+  if (!target) {
+    if (runningSubtype == ESP_PARTITION_SUBTYPE_APP_OTA_0 || runningSubtype == ESP_PARTITION_SUBTYPE_APP_OTA_1) {
+      Serial.printf("[CHESS] Target OTA partition not found for subtype=%d; falling back to next update partition\n", static_cast<int>(targetSubtype));
+    }
+    // Explicitly pass running to avoid ambiguous NULL behavior.
+    target = esp_ota_get_next_update_partition(running);
+  }
+
+  Serial.printf("[CHESS] Running partition label=%s subtype=%d\n", running ? running->label : "<null>", static_cast<int>(runningSubtype));
+  Serial.printf("[CHESS] Target partition label=%s subtype=%d\n", target ? target->label : "<null>", target ? static_cast<int>(target->subtype) : -1);
+
+  esp_err_t err = target ? esp_ota_set_boot_partition(target) : ESP_ERR_NOT_FOUND;
+  Serial.printf("[CHESS] esp_ota_set_boot_partition result=%d\n", static_cast<int>(err));
+
+  // If we failed to set the boot partition, restarting will likely return to this app.
+  // Still restart so the user isn't trapped, but log clearly for debugging.
+  if (err != ESP_OK) {
+    Serial.println("[CHESS] WARNING: failed to switch boot partition; restart may relaunch this app");
+  }
+
+  delay(50);
   esp_restart();
 }

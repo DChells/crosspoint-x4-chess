@@ -11,11 +11,10 @@ ChessPuzzlesApp app(display, gpio);
 void setup() {
   gpio.begin();
 
-  // Only start serial if USB connected
-  if (gpio.isUsbConnected()) {
-    Serial.begin(115200);
-    Serial.println("[ChessPuzzles] Starting...");
-  }
+  // Always start serial so debugging works over UART.
+  Serial.begin(115200);
+  delay(50);
+  Serial.printf("[ChessPuzzles] Starting... usb=%d\n", gpio.isUsbConnected() ? 1 : 0);
 
   app.onEnter();
 }

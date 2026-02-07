@@ -44,6 +44,7 @@ class ChessPuzzlesApp final {
   bool puzzleSolved = false;
   bool puzzleFailed = false;
   bool hintActive = false;
+  bool ignoreBackRelease = false;
   
   int cursorFile = 4;
   int cursorRank = 3;
@@ -103,6 +104,7 @@ class ChessPuzzlesApp final {
   void renderPiece(int file, int rank);
   void renderCursor();
   void renderLegalMoveHints();
+  void renderHint();
   void renderStatus();
   
   void loadAvailablePacks();
@@ -141,6 +143,9 @@ class ChessPuzzlesApp final {
 
   void renderSdCardError();
   void returnToLauncher();
+
+  void logModeChange(Mode from, Mode to, const char* reason);
+  void logEvent(const char* ev, const char* fmt = nullptr, ...) const;
   
   int cursorSquare() const { return cursorRank * 8 + cursorFile; }
   int screenX(int file) const;
