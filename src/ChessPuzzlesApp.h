@@ -8,6 +8,8 @@
 #include <freertos/semphr.h>
 #include <freertos/task.h>
 
+#include <esp_partition.h>
+
 #include <vector>
 #include <string>
 
@@ -142,7 +144,10 @@ class ChessPuzzlesApp final {
   void buildNavigablePieceList();
 
   void renderSdCardError();
+  void renderPartitionError();
   void returnToLauncher();
+
+  bool validatePartition(const esp_partition_t* partition);
 
   void logModeChange(Mode from, Mode to, const char* reason);
   void logEvent(const char* ev, const char* fmt = nullptr, ...) const;

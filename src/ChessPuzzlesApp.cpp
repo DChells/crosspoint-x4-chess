@@ -1776,6 +1776,32 @@ void ChessPuzzlesApp::renderSdCardError() {
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
+void ChessPuzzlesApp::renderPartitionError() {
+  auto& renderer = renderer_;
+  renderer.clearScreen();
+  renderer.drawCenteredText(UI_12_FONT_ID, 160, "Cannot return to launcher");
+  renderer.drawCenteredText(UI_10_FONT_ID, 200, "Target partition invalid");
+  renderer.drawButtonHints(UI_10_FONT_ID, "Exit", "", "", "");
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+}
+
+bool ChessPuzzlesApp::validatePartition(const esp_partition_t* partition) {
+  if (!partition) {
+    Serial.println("[CHESS] validatePartition: partition is null");
+    return false;
+  }
+
+  uint8_t magic;
+  esp_err_t err = esp_partition_read(partition, 0, &magic, 1);
+  if (err != ESP_OK) {
+    Serial.printf("[CHESS] validatePartition: failed to read partition %s, err=%d\n", partition->label, err);
+    return false;
+  }
+
+  Serial.printf("[CHESS] validatePartition: partition %s magic=0x%02X\n", partition->label, magic);
+  return (magic == 0xE9);
+}
+
 void ChessPuzzlesApp::returnToLauncher() {
   const esp_partition_t* running = esp_ota_get_running_partition();
   const esp_partition_t* target = nullptr;
@@ -1803,6 +1829,12 @@ void ChessPuzzlesApp::returnToLauncher() {
 
   Serial.printf("[CHESS] Running partition label=%s subtype=%d\n", running ? running->label : "<null>", static_cast<int>(runningSubtype));
   Serial.printf("[CHESS] Target partition label=%s subtype=%d\n", target ? target->label : "<null>", target ? static_cast<int>(target->subtype) : -1);
+
+  if (!validatePartition(target)) {
+    Serial.println("[CHESS] Aborting returnToLauncher: target partition validation failed");
+    renderPartitionError();
+    return;
+  }
 
   esp_err_t err = target ? esp_ota_set_boot_partition(target) : ESP_ERR_NOT_FOUND;
   Serial.printf("[CHESS] esp_ota_set_boot_partition result=%d\n", static_cast<int>(err));
