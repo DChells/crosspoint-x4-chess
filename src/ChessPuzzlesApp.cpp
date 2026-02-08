@@ -926,7 +926,7 @@ void ChessPuzzlesApp::renderStatus() {
       if (!activeTheme.empty()) {
         std::string prettyTheme = activeTheme;
         std::replace(prettyTheme.begin(), prettyTheme.end(), '_', ' ');
-        std::string themeLine = "Theme: " + prettyTheme;
+        std::string themeLine = \"Theme: \" + prettyTheme;
         const int maxW = renderer.getScreenWidth() - 20;
         if (renderer.getTextWidth(UI_10_FONT_ID, themeLine.c_str()) > maxW) {
           themeLine = renderer.truncatedText(UI_10_FONT_ID, themeLine.c_str(), maxW);
@@ -935,7 +935,17 @@ void ChessPuzzlesApp::renderStatus() {
         infoY += 20;
       }
 
-      renderer.drawCenteredText(UI_10_FONT_ID, infoY, "Hold Menu for options");
+      if (!currentPuzzle.opening.empty()) {
+        std::string openingLine = \"Opening: \" + currentPuzzle.opening;
+        const int maxW = renderer.getScreenWidth() - 20;
+        if (renderer.getTextWidth(UI_10_FONT_ID, openingLine.c_str()) > maxW) {
+          openingLine = renderer.truncatedText(UI_10_FONT_ID, openingLine.c_str(), maxW);
+        }
+        renderer.drawCenteredText(UI_10_FONT_ID, infoY, openingLine.c_str());
+        infoY += 20;
+      }
+
+      renderer.drawCenteredText(UI_10_FONT_ID, infoY, \"Hold Menu for options\");
     }
   }
 }
