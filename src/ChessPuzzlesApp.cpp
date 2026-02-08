@@ -457,8 +457,13 @@ void ChessPuzzlesApp::loop() {
           }
         };
 
-        auto scan = [&](bool wrap) {
+        auto scan = [&](bool wrap, int forcedUp = 0, int forcedDown = 0, int forcedLeft = 0, int forcedRight = 0) {
           found = false;
+
+          const bool up = forcedUp ? (forcedUp > 0) : goUp;
+          const bool down = forcedDown ? (forcedDown > 0) : goDown;
+          const bool left = forcedLeft ? (forcedLeft > 0) : goLeft;
+          const bool right = forcedRight ? (forcedRight > 0) : goRight;
 
           for (int sq : navigablePieces) {
             if (sq == curSq) continue;
@@ -469,23 +474,45 @@ void ChessPuzzlesApp::loop() {
             const int dx = x - curX;
             const int dy = y - curY;
 
-            if (goUp) {
+            if (up) {
               if (!wrap && dy >= 0) continue;
               if (wrap && dy <= 0) continue;
               consider(sq, wrap ? -dy : -dy, dx < 0 ? -dx : dx);
-            } else if (goDown) {
+            } else if (down) {
               if (!wrap && dy <= 0) continue;
               if (wrap && dy >= 0) continue;
               consider(sq, wrap ? dy : dy, dx < 0 ? -dx : dx);
-            } else if (goLeft) {
+            } else if (left) {
               if (!wrap && dx >= 0) continue;
               if (wrap && dx <= 0) continue;
               consider(sq, wrap ? -dx : -dx, dy < 0 ? -dy : dy);
-            } else if (goRight) {
+            } else if (right) {
               if (!wrap && dx <= 0) continue;
               if (wrap && dx >= 0) continue;
               consider(sq, wrap ? dx : dx, dy < 0 ? -dy : dy);
             }
+          }
+        };
+
+        scan(false);
+        if (!found) {
+          if (goLeft) {
+            logEvent("NAV", "Wrapping LEFT->UP");
+            scan(false, 1, 0, 0, 0);
+          } else if (goRight) {
+            logEvent("NAV", "Wrapping RIGHT->DOWN");
+            scan(false, 0, 1, 0, 0);
+          } else if (goUp) {
+            logEvent("NAV", "Wrapping UP->LEFT");
+            scan(false, 0, 0, 1, 0);
+          } else if (goDown) {
+            logEvent("NAV", "Wrapping DOWN->RIGHT");
+            scan(false, 0, 0, 0, 1);
+          }
+        }
+        if (!found) {
+          scan(true);
+        }
           }
         };
 
@@ -539,8 +566,13 @@ void ChessPuzzlesApp::loop() {
           }
         };
 
-        auto scan = [&](bool wrap) {
+        auto scan = [&](bool wrap, int forcedUp = 0, int forcedDown = 0, int forcedLeft = 0, int forcedRight = 0) {
           found = false;
+
+          const bool up = forcedUp ? (forcedUp > 0) : goUp;
+          const bool down = forcedDown ? (forcedDown > 0) : goDown;
+          const bool left = forcedLeft ? (forcedLeft > 0) : goLeft;
+          const bool right = forcedRight ? (forcedRight > 0) : goRight;
 
           for (size_t i = 0; i < legalMovesFromSelected.size(); i++) {
             const int sq = legalMovesFromSelected[i].to;
@@ -552,19 +584,19 @@ void ChessPuzzlesApp::loop() {
             const int dx = x - curX;
             const int dy = y - curY;
 
-            if (goUp) {
+            if (up) {
               if (!wrap && dy >= 0) continue;
               if (wrap && dy <= 0) continue;
               consider(sq, -dy, dx < 0 ? -dx : dx);
-            } else if (goDown) {
+            } else if (down) {
               if (!wrap && dy <= 0) continue;
               if (wrap && dy >= 0) continue;
               consider(sq, dy, dx < 0 ? -dx : dx);
-            } else if (goLeft) {
+            } else if (left) {
               if (!wrap && dx >= 0) continue;
               if (wrap && dx <= 0) continue;
               consider(sq, -dx, dy < 0 ? -dy : dy);
-            } else if (goRight) {
+            } else if (right) {
               if (!wrap && dx <= 0) continue;
               if (wrap && dx >= 0) continue;
               consider(sq, dx, dy < 0 ? -dy : dy);
@@ -573,6 +605,21 @@ void ChessPuzzlesApp::loop() {
         };
 
         scan(false);
+        if (!found) {
+          if (goLeft) {
+            logEvent("NAV", "Wrapping LEFT->UP");
+            scan(false, 1, 0, 0, 0);
+          } else if (goRight) {
+            logEvent("NAV", "Wrapping RIGHT->DOWN");
+            scan(false, 0, 1, 0, 0);
+          } else if (goUp) {
+            logEvent("NAV", "Wrapping UP->LEFT");
+            scan(false, 0, 0, 1, 0);
+          } else if (goDown) {
+            logEvent("NAV", "Wrapping DOWN->RIGHT");
+            scan(false, 0, 0, 0, 1);
+          }
+        }
         if (!found) {
           scan(true);
         }
