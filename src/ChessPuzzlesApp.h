@@ -29,8 +29,12 @@ class ChessPuzzlesApp final {
   HalGPIO& input_;
   GfxRenderer renderer_;
 
-  enum class Mode { PackSelect, PackMenu, ThemeSelect, Browsing, Playing, InGameMenu };
-  Mode currentMode = Mode::PackSelect;
+  enum class Mode { MainMenu, PackSelect, PackMenu, ThemeSelect, Browsing, Playing, InGameMenu };
+  Mode currentMode = Mode::MainMenu;
+  
+  enum class MainMenuItem { Puzzles, OneVsOne, VsBot };
+  int mainMenuIndex = 0;
+  static constexpr int MAIN_MENU_ITEM_COUNT = 3;
   
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
@@ -96,6 +100,7 @@ class ChessPuzzlesApp final {
   [[noreturn]] void displayTaskLoop();
   
   void render();
+  void renderMainMenu();
   void renderPackSelect();
   void renderPackMenu();
   void renderThemeSelect();
