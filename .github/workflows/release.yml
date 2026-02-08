@@ -49,6 +49,26 @@ jobs:
       - name: Copy firmware binary
         run: cp .pio/build/chess-puzzles/firmware.bin app.bin
 
+      - name: Generate app.json (Apps ZIP)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref_name="${GITHUB_REF_NAME}"
+          version="${ref_name#v}"
+          cat > app.json <<EOF
+          {
+            "id": "chess-puzzles",
+            "name": "Chess Puzzles",
+            "version": "${version}",
+            "description": "Chess puzzles for CrossPoint X4",
+            "author": "DChells",
+            "minFirmware": "0.16.0"
+          }
+          EOF
+
+      - name: Create app.zip (for /upload-app-zip)
+        run: zip -r app.zip app.bin app.json
+
       - name: Create assets archive
         run: |
           mkdir -p assets-archive/.crosspoint/chess
@@ -70,6 +90,20 @@ jobs:
           zip -r ../assets.zip .crosspoint/ README.txt
           cd ..
 
+      - name: Create sdcard.zip (full SD layout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf sdcard-archive
+          mkdir -p sdcard-archive/.crosspoint/apps/chess-puzzles
+          cp app.bin sdcard-archive/.crosspoint/apps/chess-puzzles/app.bin
+          cp app.json sdcard-archive/.crosspoint/apps/chess-puzzles/app.json
+          mkdir -p sdcard-archive/.crosspoint/chess
+          cp -r assets/sprites sdcard-archive/.crosspoint/chess/
+          cp -r assets/packs sdcard-archive/.crosspoint/chess/
+          cp -r assets/index sdcard-archive/.crosspoint/chess/
+          (cd sdcard-archive && zip -r ../sdcard.zip .crosspoint/)
+
       - name: Upload build artifacts
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v4
@@ -77,7 +111,10 @@ jobs:
           name: crosspoint-x4-chess
           path: |
             app.bin
+            app.json
+            app.zip
             assets.zip
+            sdcard.zip
 
       - name: Create Release
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
@@ -85,7 +122,10 @@ jobs:
         with:
           files: |
             app.bin
+            app.json
+            app.zip
             assets.zip
+            sdcard.zip
           generate_release_notes: true
           draft: false
           prerelease: false

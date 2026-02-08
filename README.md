@@ -51,6 +51,24 @@ Theme index (optional, enables theme selection UI):
 
 For end-user distribution, the recommended approach is to publish an `assets.zip` that unpacks to `/.crosspoint/chess/`.
 
+## Install on device (PR #679 Apps workflow)
+
+CrossPoint PR #679 adds an Apps page that supports uploading a ZIP containing `app.bin` + `app.json`.
+
+Releases publish:
+- `app.zip` (contains `app.bin` + `app.json`) for **WiFi upload**
+- `sdcard.zip` (full SD layout) for **unzip-to-SD** installs
+- `assets.zip` (legacy) that unpacks to `/.crosspoint/chess/`
+
+WiFi upload:
+1. Device: Home -> File Transfer -> Apps
+2. Upload `app.zip`
+3. On device: Home -> Apps -> Chess Puzzles -> Install
+
+SD card:
+1. Unzip `sdcard.zip` to the root of your SD card (creates `/.crosspoint/apps/chess-puzzles/` and `/.crosspoint/chess/`)
+2. On device: Home -> Apps -> Chess Puzzles -> Install
+
 This repo includes a small starter pack:
 
 - `assets/packs/starter.cpz`
