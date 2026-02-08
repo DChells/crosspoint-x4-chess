@@ -111,6 +111,7 @@ class ChessPuzzlesApp final {
   void renderCursor();
   void renderLegalMoveHints();
   void renderHint();
+  void drawHatchedRect(int x, int y, int w, int h, bool color, int spacing = 4);
   void renderStatus();
   
   void loadAvailablePacks();

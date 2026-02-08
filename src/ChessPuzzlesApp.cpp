@@ -705,7 +705,7 @@ void ChessPuzzlesApp::renderHint() {
 
   const Chess::Move& m = currentPuzzle.solution[currentMoveIndex];
 
-  auto drawBox = [&](int sq, int thickness, bool fullBox) {
+  auto drawBox = [&](int sq, int thickness, bool isToSquare) {
     const int file = Chess::BoardState::fileOf(sq);
     const int rank = Chess::BoardState::rankOf(sq);
     const int x = screenX(file);
@@ -714,17 +714,12 @@ void ChessPuzzlesApp::renderHint() {
     const bool squareIsLight = (file + rank) % 2 == 1;
     const bool color = squareIsLight;
 
-    if (fullBox) {
-      for (int t = 0; t < thickness; t++) {
-        renderer.drawLine(x + t, y + t, x + SQUARE_SIZE - 1 - t, y + t, color);
-        renderer.drawLine(x + t, y + SQUARE_SIZE - 1 - t, x + SQUARE_SIZE - 1 - t,
-                          y + SQUARE_SIZE - 1 - t, color);
-        renderer.drawLine(x + t, y + t, x + t, y + SQUARE_SIZE - 1 - t, color);
-        renderer.drawLine(x + SQUARE_SIZE - 1 - t, y + t, x + SQUARE_SIZE - 1 - t,
-                          y + SQUARE_SIZE - 1 - t, color);
-      }
+    if (isToSquare) {
+      drawHatchedRect(x, y, SQUARE_SIZE, SQUARE_SIZE, color, 4);
       return;
     }
+
+    drawHatchedRect(x, y, SQUARE_SIZE, SQUARE_SIZE, color, 6);
 
     constexpr int cornerLen = 18;
     for (int t = 0; t < thickness; t++) {
@@ -744,7 +739,6 @@ void ChessPuzzlesApp::renderHint() {
     }
   };
 
-  // From: bracket corners. To: full box.
   drawBox(m.from, 4, false);
   drawBox(m.to, 3, true);
 }
@@ -934,6 +928,36 @@ void ChessPuzzlesApp::renderLegalMoveHints() {
           }
         }
       }
+    }
+  }
+}
+
+void ChessPuzzlesApp::drawHatchedRect(int x, int y, int w, int h, bool color, int spacing) {
+  for (int i = -h; i < w; i += spacing) {
+    int x0 = x + i;
+    int y0 = y;
+    int x1 = x + i + h;
+    int y1 = y + h;
+
+    if (x0 < x) {
+      y0 += (x - x0);
+      x0 = x;
+    }
+    if (x1 > x + w) {
+      y1 -= (x1 - (x + w));
+      x1 = x + w;
+    }
+    if (y0 < y) {
+      x0 += (y - y0);
+      y0 = y;
+    }
+    if (y1 > y + h) {
+      x1 -= (y1 - (y + h));
+      y1 = y + h;
+    }
+
+    if (x0 < x1 && y0 < y1) {
+      renderer_.drawLine(x0, y0, x1, y1, color);
     }
   }
 }
