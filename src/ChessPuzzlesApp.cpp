@@ -235,7 +235,13 @@ void ChessPuzzlesApp::loop() {
         logEvent("PACK", "name=%s", packName.c_str());
         updateRequired = true;
       }
-    } else if (input_.wasReleased(HalGPIO::BTN_BACK)) {\n      logBtn(\"BACK\");\n      logModeChange(currentMode, Mode::MainMenu, \"back\");\n      currentMode = Mode::MainMenu;\n      updateRequired = true;\n    }\n    return;
+    } else if (input_.wasReleased(HalGPIO::BTN_BACK)) {
+      logBtn("BACK");
+      logModeChange(currentMode, Mode::MainMenu, "back");
+      currentMode = Mode::MainMenu;
+      updateRequired = true;
+    }
+    return;
   }
 
   if (currentMode == Mode::PackMenu) {
@@ -836,7 +842,15 @@ void ChessPuzzlesApp::renderInGameMenu() {
   for (int i = 0; i < itemCount; i++) {
     const int y = itemStartY + i * itemLineHeight;
 
-    if (i == inGameMenuIndex) {\n      const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, items[i]);\n      const int rectX = (screenWidth - textWidth) / 2 - MENU_HIGHLIGHT_PADDING;\n      renderer.fillRect(rectX, y - 6, textWidth + MENU_HIGHLIGHT_PADDING * 2, itemLineHeight - 6);\n      renderer.drawText(UI_12_FONT_ID, rectX + MENU_HIGHLIGHT_PADDING, y, items[i], false);\n    } else {\n      renderer.drawText(UI_12_FONT_ID, itemTextX, y, items[i], false);\n    }\n  }
+        if (i == inGameMenuIndex) {
+      const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, items[i]);
+      const int rectX = (screenWidth - textWidth) / 2 - MENU_HIGHLIGHT_PADDING;
+      renderer.fillRect(rectX, y - 6, textWidth + MENU_HIGHLIGHT_PADDING * 2, itemLineHeight - 6);
+      renderer.drawText(UI_12_FONT_ID, rectX + MENU_HIGHLIGHT_PADDING, y, items[i], false);
+    } else {
+      renderer.drawText(UI_12_FONT_ID, itemTextX, y, items[i], false);
+    }
+  }
 
   const char* footer = "Up/Down: choose";
   const int footerWidth = renderer.getTextWidth(UI_10_FONT_ID, footer);
@@ -1099,7 +1113,11 @@ void ChessPuzzlesApp::loadAvailablePacks() {
   Serial.printf("[CHESS] Found %d puzzle packs\n", availablePacks.size());
 }
 
-void ChessPuzzlesApp::renderPackSelect() {\n  auto& renderer = renderer_;\n\n  renderer.drawCenteredText(UI_12_FONT_ID, 30, \"Chess\");\n  renderer.drawCenteredText(UI_10_FONT_ID, 60, \"Select a puzzle pack:\");
+void ChessPuzzlesApp::renderPackSelect() {
+  auto& renderer = renderer_;
+
+  renderer.drawCenteredText(UI_12_FONT_ID, 30, "Chess");
+  renderer.drawCenteredText(UI_10_FONT_ID, 60, "Select a puzzle pack:");
   
   if (availablePacks.empty()) {
     renderer.drawCenteredText(UI_10_FONT_ID, 150, "No puzzle packs found!");
@@ -1124,7 +1142,14 @@ void ChessPuzzlesApp::renderPackSelect() {\n  auto& renderer = renderer_;\n\n  r
         displayName = displayName.substr(0, displayName.size() - 4);
       }
       
-      if (idx == packSelectorIndex) {\n        int textWidth = renderer.getTextWidth(UI_12_FONT_ID, displayName.c_str());\n        int screenWidth = renderer.getScreenWidth();\n        int rectX = (screenWidth - textWidth) / 2 - MENU_HIGHLIGHT_PADDING;\n        renderer.fillRect(rectX, y - 2, textWidth + MENU_HIGHLIGHT_PADDING * 2, lineHeight - 4);\n        renderer.drawText(UI_12_FONT_ID, rectX + MENU_HIGHLIGHT_PADDING, y, displayName.c_str(), false);\n      } else {\n        renderer.drawCenteredText(UI_10_FONT_ID, y, displayName.c_str());
+      if (idx == packSelectorIndex) {
+        int textWidth = renderer.getTextWidth(UI_12_FONT_ID, displayName.c_str());
+        int screenWidth = renderer.getScreenWidth();
+        int rectX = (screenWidth - textWidth) / 2 - MENU_HIGHLIGHT_PADDING;
+        renderer.fillRect(rectX, y - 2, textWidth + MENU_HIGHLIGHT_PADDING * 2, lineHeight - 4);
+        renderer.drawText(UI_12_FONT_ID, rectX + MENU_HIGHLIGHT_PADDING, y, displayName.c_str(), false);
+      } else {
+        renderer.drawCenteredText(UI_10_FONT_ID, y, displayName.c_str());
       }
     }
     
@@ -1531,7 +1556,13 @@ void ChessPuzzlesApp::renderPackMenu() {
   for (int i = 0; i < PACK_MENU_ITEM_COUNT; i++) {
     int y = startY + i * lineHeight;
     
-    if (i == packMenuIndex) {\n      int textWidth = renderer.getTextWidth(UI_12_FONT_ID, menuItems[i]);\n      int rectX = (screenWidth - textWidth) / 2 - MENU_HIGHLIGHT_PADDING;\n      renderer.fillRect(rectX, y - 2, textWidth + MENU_HIGHLIGHT_PADDING * 2, lineHeight - 8);\n      renderer.drawText(UI_12_FONT_ID, rectX + MENU_HIGHLIGHT_PADDING, y, menuItems[i], false);\n    } else {\n      renderer.drawCenteredText(UI_10_FONT_ID, y, menuItems[i]);
+    if (i == packMenuIndex) {
+      int textWidth = renderer.getTextWidth(UI_12_FONT_ID, menuItems[i]);
+      int rectX = (screenWidth - textWidth) / 2 - MENU_HIGHLIGHT_PADDING;
+      renderer.fillRect(rectX, y - 2, textWidth + MENU_HIGHLIGHT_PADDING * 2, lineHeight - 8);
+      renderer.drawText(UI_12_FONT_ID, rectX + MENU_HIGHLIGHT_PADDING, y, menuItems[i], false);
+    } else {
+      renderer.drawCenteredText(UI_10_FONT_ID, y, menuItems[i]);
     }
   }
   
@@ -1570,7 +1601,13 @@ void ChessPuzzlesApp::renderBrowser() {
     char itemStr[64];
     snprintf(itemStr, sizeof(itemStr), "%s #%d", solved ? "[x]" : "[ ]", idx + 1);
     
-    if (idx == browserIndex) {\n      int textWidth = renderer.getTextWidth(UI_12_FONT_ID, itemStr);\n      int rectX = listX + 10 - MENU_HIGHLIGHT_PADDING;\n      renderer.fillRect(rectX, y - 2, textWidth + MENU_HIGHLIGHT_PADDING * 2, lineHeight - 4);\n      renderer.drawText(UI_12_FONT_ID, listX + 10, y, itemStr, false);\n    } else {\n      renderer.drawText(UI_10_FONT_ID, listX + 10, y, itemStr, true);
+    if (idx == browserIndex) {
+      int textWidth = renderer.getTextWidth(UI_12_FONT_ID, itemStr);
+      int rectX = listX + 10 - MENU_HIGHLIGHT_PADDING;
+      renderer.fillRect(rectX, y - 2, textWidth + MENU_HIGHLIGHT_PADDING * 2, lineHeight - 4);
+      renderer.drawText(UI_12_FONT_ID, listX + 10, y, itemStr, false);
+    } else {
+      renderer.drawText(UI_10_FONT_ID, listX + 10, y, itemStr, true);
     }
   }
   
@@ -1844,7 +1881,13 @@ void ChessPuzzlesApp::renderThemeSelect() {
       std::string prettyTheme = theme;
       std::replace(prettyTheme.begin(), prettyTheme.end(), '_', ' ');
       
-      if (idx == themeSelectIndex) {\n        int textWidth = renderer.getTextWidth(UI_10_FONT_ID, prettyTheme.c_str());\n        int rectX = listX + 10 - MENU_HIGHLIGHT_PADDING;\n        renderer.fillRect(rectX, y - 2, textWidth + MENU_HIGHLIGHT_PADDING * 2, lineHeight - 4);\n        renderer.drawText(UI_10_FONT_ID, listX + 10, y, prettyTheme.c_str(), false);\n      } else {\n        renderer.drawText(UI_10_FONT_ID, listX + 10, y, prettyTheme.c_str(), true);
+      if (idx == themeSelectIndex) {
+        int textWidth = renderer.getTextWidth(UI_10_FONT_ID, prettyTheme.c_str());
+        int rectX = listX + 10 - MENU_HIGHLIGHT_PADDING;
+        renderer.fillRect(rectX, y - 2, textWidth + MENU_HIGHLIGHT_PADDING * 2, lineHeight - 4);
+        renderer.drawText(UI_10_FONT_ID, listX + 10, y, prettyTheme.c_str(), false);
+      } else {
+        renderer.drawText(UI_10_FONT_ID, listX + 10, y, prettyTheme.c_str(), true);
       }
     }
     

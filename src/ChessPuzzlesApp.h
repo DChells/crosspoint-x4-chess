@@ -67,7 +67,9 @@ class ChessPuzzlesApp final {
   static constexpr int BOARD_SIZE = SQUARE_SIZE * 8;
   static constexpr int BOARD_OFFSET_X = 0;
   static constexpr int BOARD_OFFSET_Y = 0;
-  static constexpr int STATUS_Y = BOARD_SIZE + 10;\n  static constexpr int MENU_HIGHLIGHT_PADDING = 8;\n  
+   static constexpr int STATUS_Y = BOARD_SIZE + 10;
+  static constexpr int MENU_HIGHLIGHT_PADDING = 8;
+
   std::string packPath;
   std::string packName;
   uint32_t puzzleCount = 0;
