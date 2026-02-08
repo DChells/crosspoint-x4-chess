@@ -35,6 +35,18 @@ ChessPuzzlesApp::ChessPuzzlesApp(HalDisplay& display, HalGPIO& input)
     : display_(display), input_(input), renderer_(display) {}
 
 void ChessPuzzlesApp::onEnter() {
+  const esp_partition_t* running = esp_ota_get_running_partition();
+  const esp_partition_t* boot = esp_ota_get_boot_partition();
+  Serial.printf("[CHESS] BOOT: Running partition=%s addr=0x%08X\n",
+                running ? running->label : "null", running ? running->address : 0);
+  Serial.printf("[CHESS] BOOT: Boot partition=%s addr=0x%08X\n",
+                boot ? boot->label : "null", boot ? boot->address : 0);
+
+  const esp_partition_t* ota0 = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, nullptr);
+  const esp_partition_t* ota1 = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, nullptr);
+  Serial.printf("[CHESS] BOOT: OTA_0=%s OTA_1=%s\n",
+                ota0 ? "present" : "missing", ota1 ? "present" : "missing");
+
   display_.begin();
   renderer_.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer_.insertFont(UI_12_FONT_ID, ui12FontFamily);
@@ -122,18 +134,28 @@ void ChessPuzzlesApp::logModeChange(Mode from, Mode to, const char* reason) {
 }
 
 void ChessPuzzlesApp::loop() {
+  auto logBtn = [this](const char* btn) {
+    auto modeName = [](Mode m) {
+      switch (m) {
+        case Mode::PackSelect: return "PackSelect";
+        case Mode::PackMenu: return "PackMenu";
+        case Mode::ThemeSelect: return "ThemeSelect";
+        case Mode::Browsing: return "Browsing";
+        case Mode::Playing: return "Playing";
+        case Mode::InGameMenu: return "InGameMenu";
+      }
+      return "?";
+    };
+    logEvent("INPUT", "%s pressed in mode=%s", btn, modeName(currentMode));
+  };
+
   if (currentMode == Mode::PackSelect) {
-    if (input_.wasPressed(HalGPIO::BTN_UP) || input_.wasPressed(HalGPIO::BTN_LEFT)) {
-      if (packSelectorIndex > 0) {
-        packSelectorIndex--;
-        updateRequired = true;
-      }
-    } else if (input_.wasPressed(HalGPIO::BTN_DOWN) || input_.wasPressed(HalGPIO::BTN_RIGHT)) {
-      if (packSelectorIndex < static_cast<int>(availablePacks.size()) - 1) {
-        packSelectorIndex++;
-        updateRequired = true;
-      }
-    } else if (input_.wasReleased(HalGPIO::BTN_CONFIRM)) {
+    if (input_.wasPressed(HalGPIO::BTN_UP)) { logBtn("UP"); if (packSelectorIndex > 0) { packSelectorIndex--; updateRequired = true; } }
+    else if (input_.wasPressed(HalGPIO::BTN_LEFT)) { logBtn("LEFT"); if (packSelectorIndex > 0) { packSelectorIndex--; updateRequired = true; } }
+    else if (input_.wasPressed(HalGPIO::BTN_DOWN)) { logBtn("DOWN"); if (packSelectorIndex < static_cast<int>(availablePacks.size()) - 1) { packSelectorIndex++; updateRequired = true; } }
+    else if (input_.wasPressed(HalGPIO::BTN_RIGHT)) { logBtn("RIGHT"); if (packSelectorIndex < static_cast<int>(availablePacks.size()) - 1) { packSelectorIndex++; updateRequired = true; } }
+    else if (input_.wasReleased(HalGPIO::BTN_CONFIRM)) {
+      logBtn("CONFIRM");
       if (!availablePacks.empty()) {
         packPath = "/.crosspoint/chess/packs/" + availablePacks[packSelectorIndex];
         packName = availablePacks[packSelectorIndex];
@@ -155,6 +177,7 @@ void ChessPuzzlesApp::loop() {
         updateRequired = true;
       }
     } else if (input_.wasReleased(HalGPIO::BTN_BACK)) {
+      logBtn("BACK");
       logEvent("EXIT", "from=PackSelect");
       returnToLauncher();
     }
@@ -162,17 +185,12 @@ void ChessPuzzlesApp::loop() {
   }
 
   if (currentMode == Mode::PackMenu) {
-    if (input_.wasPressed(HalGPIO::BTN_UP) || input_.wasPressed(HalGPIO::BTN_LEFT)) {
-      if (packMenuIndex > 0) {
-        packMenuIndex--;
-        updateRequired = true;
-      }
-    } else if (input_.wasPressed(HalGPIO::BTN_DOWN) || input_.wasPressed(HalGPIO::BTN_RIGHT)) {
-      if (packMenuIndex < PACK_MENU_ITEM_COUNT - 1) {
-        packMenuIndex++;
-        updateRequired = true;
-      }
-    } else if (input_.wasReleased(HalGPIO::BTN_CONFIRM)) {
+    if (input_.wasPressed(HalGPIO::BTN_UP)) { logBtn("UP"); if (packMenuIndex > 0) { packMenuIndex--; updateRequired = true; } }
+    else if (input_.wasPressed(HalGPIO::BTN_LEFT)) { logBtn("LEFT"); if (packMenuIndex > 0) { packMenuIndex--; updateRequired = true; } }
+    else if (input_.wasPressed(HalGPIO::BTN_DOWN)) { logBtn("DOWN"); if (packMenuIndex < PACK_MENU_ITEM_COUNT - 1) { packMenuIndex++; updateRequired = true; } }
+    else if (input_.wasPressed(HalGPIO::BTN_RIGHT)) { logBtn("RIGHT"); if (packMenuIndex < PACK_MENU_ITEM_COUNT - 1) { packMenuIndex++; updateRequired = true; } }
+    else if (input_.wasReleased(HalGPIO::BTN_CONFIRM)) {
+      logBtn("CONFIRM");
       switch (static_cast<PackMenuItem>(packMenuIndex)) {
         case PackMenuItem::Continue: {
           uint32_t savedIndex = loadProgress();
@@ -205,11 +223,12 @@ void ChessPuzzlesApp::loop() {
           themeBitset.clear();
           logModeChange(currentMode, Mode::Browsing, "browse");
           currentMode = Mode::Browsing;
-          break;
-        }
+            break;
+          }
       }
       updateRequired = true;
     } else if (input_.wasReleased(HalGPIO::BTN_BACK)) {
+      logBtn("BACK");
       logModeChange(currentMode, Mode::PackSelect, "back");
       currentMode = Mode::PackSelect;
       updateRequired = true;
@@ -218,17 +237,12 @@ void ChessPuzzlesApp::loop() {
   }
 
   if (currentMode == Mode::ThemeSelect) {
-    if (input_.wasPressed(HalGPIO::BTN_UP) || input_.wasPressed(HalGPIO::BTN_LEFT)) {
-      if (themeSelectIndex > 0) {
-        themeSelectIndex--;
-        updateRequired = true;
-      }
-    } else if (input_.wasPressed(HalGPIO::BTN_DOWN) || input_.wasPressed(HalGPIO::BTN_RIGHT)) {
-      if (themeSelectIndex < static_cast<int>(availableThemes.size()) - 1) {
-        themeSelectIndex++;
-        updateRequired = true;
-      }
-    } else if (input_.wasReleased(HalGPIO::BTN_CONFIRM)) {
+    if (input_.wasPressed(HalGPIO::BTN_UP)) { logBtn("UP"); if (themeSelectIndex > 0) { themeSelectIndex--; updateRequired = true; } }
+    else if (input_.wasPressed(HalGPIO::BTN_LEFT)) { logBtn("LEFT"); if (themeSelectIndex > 0) { themeSelectIndex--; updateRequired = true; } }
+    else if (input_.wasPressed(HalGPIO::BTN_DOWN)) { logBtn("DOWN"); if (themeSelectIndex < static_cast<int>(availableThemes.size()) - 1) { themeSelectIndex++; updateRequired = true; } }
+    else if (input_.wasPressed(HalGPIO::BTN_RIGHT)) { logBtn("RIGHT"); if (themeSelectIndex < static_cast<int>(availableThemes.size()) - 1) { themeSelectIndex++; updateRequired = true; } }
+    else if (input_.wasReleased(HalGPIO::BTN_CONFIRM)) {
+      logBtn("CONFIRM");
       if (!availableThemes.empty()) {
         activeTheme = availableThemes[themeSelectIndex];
         loadThemeBitset(activeTheme);
@@ -239,6 +253,7 @@ void ChessPuzzlesApp::loop() {
         updateRequired = true;
       }
     } else if (input_.wasReleased(HalGPIO::BTN_BACK)) {
+      logBtn("BACK");
       logModeChange(currentMode, Mode::PackMenu, "back");
       currentMode = Mode::PackMenu;
       updateRequired = true;
@@ -248,35 +263,26 @@ void ChessPuzzlesApp::loop() {
 
   if (currentMode == Mode::Browsing) {
     if (input_.wasPressed(HalGPIO::BTN_UP)) {
-      if (browserIndex > 0) {
-        browserIndex--;
-        updateRequired = true;
-      }
+      logBtn("UP");
+      if (loadPrevPuzzleFromPack()) { updateRequired = true; }
     } else if (input_.wasPressed(HalGPIO::BTN_DOWN)) {
-      if (browserIndex < puzzleCount - 1) {
-        browserIndex++;
-        updateRequired = true;
-      }
+      logBtn("DOWN");
+      if (loadNextPuzzleFromPack()) { updateRequired = true; }
     } else if (input_.wasPressed(HalGPIO::BTN_LEFT)) {
-      if (browserIndex >= 10) {
-        browserIndex -= 10;
-      } else {
-        browserIndex = 0;
-      }
+      logBtn("LEFT");
+      for (int i = 0; i < 10; i++) { if (!loadPrevPuzzleFromPack()) break; }
       updateRequired = true;
     } else if (input_.wasPressed(HalGPIO::BTN_RIGHT)) {
-      browserIndex += 10;
-      if (browserIndex >= puzzleCount) {
-        browserIndex = puzzleCount - 1;
-      }
+      logBtn("RIGHT");
+      for (int i = 0; i < 10; i++) { if (!loadNextPuzzleFromPack()) break; }
       updateRequired = true;
     } else if (input_.wasReleased(HalGPIO::BTN_CONFIRM)) {
-      if (loadPuzzleFromPack(browserIndex)) {
-        logModeChange(currentMode, Mode::Playing, "browse play");
-        currentMode = Mode::Playing;
-        updateRequired = true;
-      }
+      logBtn("CONFIRM");
+      logModeChange(currentMode, Mode::Playing, "start playing");
+      currentMode = Mode::Playing;
+      updateRequired = true;
     } else if (input_.wasReleased(HalGPIO::BTN_BACK)) {
+      logBtn("BACK");
       logModeChange(currentMode, Mode::PackMenu, "back");
       currentMode = Mode::PackMenu;
       updateRequired = true;
@@ -284,18 +290,13 @@ void ChessPuzzlesApp::loop() {
     return;
   }
 
-  if (currentMode == Mode::InGameMenu) {
-    if (input_.wasPressed(HalGPIO::BTN_UP) || input_.wasPressed(HalGPIO::BTN_LEFT)) {
-      if (inGameMenuIndex > 0) {
-        inGameMenuIndex--;
-        updateRequired = true;
-      }
-    } else if (input_.wasPressed(HalGPIO::BTN_DOWN) || input_.wasPressed(HalGPIO::BTN_RIGHT)) {
-      if (inGameMenuIndex < IN_GAME_MENU_ITEM_COUNT - 1) {
-        inGameMenuIndex++;
-        updateRequired = true;
-      }
-    } else if (input_.wasReleased(HalGPIO::BTN_CONFIRM)) {
+  if (currentMode == Mode::Playing) {
+    if (input_.wasPressed(HalGPIO::BTN_UP)) { logBtn("UP"); if (inGameMenuIndex > 0) { inGameMenuIndex--; updateRequired = true; } }
+    else if (input_.wasPressed(HalGPIO::BTN_LEFT)) { logBtn("LEFT"); if (inGameMenuIndex > 0) { inGameMenuIndex--; updateRequired = true; } }
+    else if (input_.wasPressed(HalGPIO::BTN_DOWN)) { logBtn("DOWN"); if (inGameMenuIndex < IN_GAME_MENU_ITEM_COUNT - 1) { inGameMenuIndex++; updateRequired = true; } }
+    else if (input_.wasPressed(HalGPIO::BTN_RIGHT)) { logBtn("RIGHT"); if (inGameMenuIndex < IN_GAME_MENU_ITEM_COUNT - 1) { inGameMenuIndex++; updateRequired = true; } }
+    else if (input_.wasReleased(HalGPIO::BTN_CONFIRM)) {
+      logBtn("CONFIRM");
       switch (static_cast<InGameMenuItem>(inGameMenuIndex)) {
         case InGameMenuItem::Retry:
           loadPuzzleFromPack(currentPuzzleIndex);
@@ -539,6 +540,7 @@ void ChessPuzzlesApp::loop() {
   }
 
   if (input_.wasReleased(HalGPIO::BTN_CONFIRM)) {
+    logBtn("CONFIRM");
     int sq = cursorSquare();
     
     if (pieceSelected) {
@@ -559,6 +561,7 @@ void ChessPuzzlesApp::loop() {
     }
     updateRequired = true;
   } else if (input_.wasReleased(HalGPIO::BTN_BACK)) {
+    logBtn("BACK");
     if (pieceSelected) {
       deselectPiece();
       updateRequired = true;
@@ -1806,6 +1809,7 @@ void ChessPuzzlesApp::returnToLauncher() {
   const esp_partition_t* running = esp_ota_get_running_partition();
   const esp_partition_t* target = nullptr;
 
+  Serial.printf("[CHESS] [%lu] NAV: Returning to launcher\n", millis());
   esp_partition_subtype_t runningSubtype = running ? running->subtype : static_cast<esp_partition_subtype_t>(0);
   esp_partition_subtype_t targetSubtype = static_cast<esp_partition_subtype_t>(0);
 
@@ -1816,33 +1820,38 @@ void ChessPuzzlesApp::returnToLauncher() {
     targetSubtype = ESP_PARTITION_SUBTYPE_APP_OTA_0;
     target = esp_partition_find_first(ESP_PARTITION_TYPE_APP, targetSubtype, nullptr);
   } else {
-    Serial.printf("[CHESS] Running partition subtype not ota_0/ota_1 (%d); falling back to next update partition\n", static_cast<int>(runningSubtype));
+    Serial.printf("[CHESS] [%lu] BOOT: Running partition subtype not ota_0/ota_1 (%d); falling back to next update partition\n", 
+                  millis(), static_cast<int>(runningSubtype));
   }
 
   if (!target) {
     if (runningSubtype == ESP_PARTITION_SUBTYPE_APP_OTA_0 || runningSubtype == ESP_PARTITION_SUBTYPE_APP_OTA_1) {
-      Serial.printf("[CHESS] Target OTA partition not found for subtype=%d; falling back to next update partition\n", static_cast<int>(targetSubtype));
+      Serial.printf("[CHESS] [%lu] BOOT: Target OTA partition not found for subtype=%d; falling back to next update partition\n", 
+                    millis(), static_cast<int>(targetSubtype));
     }
     // Explicitly pass running to avoid ambiguous NULL behavior.
     target = esp_ota_get_next_update_partition(running);
   }
 
-  Serial.printf("[CHESS] Running partition label=%s subtype=%d\n", running ? running->label : "<null>", static_cast<int>(runningSubtype));
-  Serial.printf("[CHESS] Target partition label=%s subtype=%d\n", target ? target->label : "<null>", target ? static_cast<int>(target->subtype) : -1);
+  Serial.printf("[CHESS] [%lu] BOOT: Running partition label=%s subtype=%d\n", 
+                millis(), running ? running->label : "<null>", static_cast<int>(runningSubtype));
+  Serial.printf("[CHESS] [%lu] BOOT: Target partition label=%s subtype=%d addr=0x%08X\n", 
+                millis(), target ? target->label : "<null>", target ? static_cast<int>(target->subtype) : -1,
+                target ? target->address : 0);
 
   if (!validatePartition(target)) {
-    Serial.println("[CHESS] Aborting returnToLauncher: target partition validation failed");
+    Serial.printf("[CHESS] [%lu] ERROR: Aborting returnToLauncher: target partition validation failed\n", millis());
     renderPartitionError();
     return;
   }
 
   esp_err_t err = target ? esp_ota_set_boot_partition(target) : ESP_ERR_NOT_FOUND;
-  Serial.printf("[CHESS] esp_ota_set_boot_partition result=%d\n", static_cast<int>(err));
+  Serial.printf("[CHESS] [%lu] BOOT: esp_ota_set_boot_partition result=%d\n", millis(), static_cast<int>(err));
 
   // If we failed to set the boot partition, restarting will likely return to this app.
   // Still restart so the user isn't trapped, but log clearly for debugging.
   if (err != ESP_OK) {
-    Serial.println("[CHESS] WARNING: failed to switch boot partition; restart may relaunch this app");
+    Serial.printf("[CHESS] [%lu] ERROR: failed to switch boot partition; restart may relaunch this app\n", millis());
   }
 
   delay(50);
