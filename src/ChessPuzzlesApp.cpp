@@ -35,18 +35,6 @@ ChessPuzzlesApp::ChessPuzzlesApp(HalDisplay& display, HalGPIO& input)
     : display_(display), input_(input), renderer_(display) {}
 
 void ChessPuzzlesApp::onEnter() {
-  const esp_partition_t* running = esp_ota_get_running_partition();
-  const esp_partition_t* boot = esp_ota_get_boot_partition();
-  Serial.printf("[CHESS] BOOT: Running partition=%s addr=0x%08X\n",
-                running ? running->label : "null", running ? running->address : 0);
-  Serial.printf("[CHESS] BOOT: Boot partition=%s addr=0x%08X\n",
-                boot ? boot->label : "null", boot ? boot->address : 0);
-
-  const esp_partition_t* ota0 = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, nullptr);
-  const esp_partition_t* ota1 = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, nullptr);
-  Serial.printf("[CHESS] BOOT: OTA_0=%s OTA_1=%s\n",
-                ota0 ? "present" : "missing", ota1 ? "present" : "missing");
-
   display_.begin();
   renderer_.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer_.insertFont(UI_12_FONT_ID, ui12FontFamily);
@@ -67,8 +55,7 @@ void ChessPuzzlesApp::onEnter() {
 
   renderingMutex = xSemaphoreCreateMutex();
 
-  currentMode = Mode::MainMenu;
-  mainMenuIndex = 0;
+  currentMode = Mode::PackSelect;
   loadAvailablePacks();
   packSelectorIndex = 0;
 
@@ -134,87 +121,19 @@ void ChessPuzzlesApp::logModeChange(Mode from, Mode to, const char* reason) {
   logEvent("MODE", "%s -> %s (%s)", modeName(from), modeName(to), reason ? reason : "");
 }
 
-void ChessPuzzlesApp::renderMainMenu() {
-  auto& renderer = renderer_;
-  int screenWidth = renderer.getScreenWidth();
-
-  renderer.drawCenteredText(UI_12_FONT_ID, 30, "Chess");
-
-  constexpr int startY = 130;
-  constexpr int lineHeight = 38;
-
-  const char* items[] = { "Puzzles", "1v1 (Coming Soon)", "vs Bot (Coming Soon)" };
-  constexpr int itemCount = MAIN_MENU_ITEM_COUNT;
-
-  for (int i = 0; i < itemCount; i++) {
-    int y = startY + i * lineHeight;
-
-    if (i == mainMenuIndex) {
-      int textWidth = renderer.getTextWidth(UI_12_FONT_ID, items[i]);
-      int rectX = (screenWidth - textWidth) / 2 - MENU_HIGHLIGHT_PADDING;
-      renderer.fillRect(rectX, y - 2, textWidth + MENU_HIGHLIGHT_PADDING * 2, lineHeight - 8);
-      renderer.drawText(UI_12_FONT_ID, rectX + MENU_HIGHLIGHT_PADDING, y, items[i], false);
-    } else {
-      renderer.drawCenteredText(UI_10_FONT_ID, y, items[i]);
-    }
-  }
-
-  renderer.drawButtonHints(UI_10_FONT_ID, "Exit", "Select", "", "");
-}
-
 void ChessPuzzlesApp::loop() {
-  auto logBtn = [this](const char* btn) {
-    auto modeName = [](Mode m) {
-      switch (m) {
-        case Mode::MainMenu: return "MainMenu";
-        case Mode::PackSelect: return "PackSelect";
-        case Mode::PackMenu: return "PackMenu";
-        case Mode::ThemeSelect: return "ThemeSelect";
-        case Mode::Browsing: return "Browsing";
-        case Mode::Playing: return "Playing";
-        case Mode::InGameMenu: return "InGameMenu";
-      }
-      return "?";
-    };
-    logEvent("INPUT", "%s pressed in mode=%s", btn, modeName(currentMode));
-  };
-
-  if (currentMode == Mode::MainMenu) {
-    if (input_.wasPressed(HalGPIO::BTN_UP)) { logBtn("UP"); if (mainMenuIndex > 0) { mainMenuIndex--; updateRequired = true; } }
-    else if (input_.wasPressed(HalGPIO::BTN_LEFT)) { logBtn("LEFT"); if (mainMenuIndex > 0) { mainMenuIndex--; updateRequired = true; } }
-    else if (input_.wasPressed(HalGPIO::BTN_DOWN)) { logBtn("DOWN"); if (mainMenuIndex < MAIN_MENU_ITEM_COUNT - 1) { mainMenuIndex++; updateRequired = true; } }
-    else if (input_.wasPressed(HalGPIO::BTN_RIGHT)) { logBtn("RIGHT"); if (mainMenuIndex < MAIN_MENU_ITEM_COUNT - 1) { mainMenuIndex++; updateRequired = true; } }
-    else if (input_.wasReleased(HalGPIO::BTN_CONFIRM)) {
-      logBtn("CONFIRM");
-      switch (static_cast<MainMenuItem>(mainMenuIndex)) {
-        case MainMenuItem::Puzzles:
-          logModeChange(currentMode, Mode::PackSelect, "puzzles selected");
-          currentMode = Mode::PackSelect;
-          updateRequired = true;
-          break;
-        case MainMenuItem::OneVsOne:
-        case MainMenuItem::VsBot:
-          renderer_.drawCenteredText(UI_10_FONT_ID, 250, "Coming Soon");
-          renderer_.displayBuffer();
-          vTaskDelay(1000 / portTICK_PERIOD_MS);
-          updateRequired = true;
-          break;
-      }
-    } else if (input_.wasReleased(HalGPIO::BTN_BACK)) {
-      logBtn("BACK");
-      logEvent("EXIT", "from=MainMenu");
-      returnToLauncher();
-    }
-    return;
-  }
-
   if (currentMode == Mode::PackSelect) {
-    if (input_.wasPressed(HalGPIO::BTN_UP)) { logBtn("UP"); if (packSelectorIndex > 0) { packSelectorIndex--; updateRequired = true; } }
-    else if (input_.wasPressed(HalGPIO::BTN_LEFT)) { logBtn("LEFT"); if (packSelectorIndex > 0) { packSelectorIndex--; updateRequired = true; } }
-    else if (input_.wasPressed(HalGPIO::BTN_DOWN)) { logBtn("DOWN"); if (packSelectorIndex < static_cast<int>(availablePacks.size()) - 1) { packSelectorIndex++; updateRequired = true; } }
-    else if (input_.wasPressed(HalGPIO::BTN_RIGHT)) { logBtn("RIGHT"); if (packSelectorIndex < static_cast<int>(availablePacks.size()) - 1) { packSelectorIndex++; updateRequired = true; } }
-    else if (input_.wasReleased(HalGPIO::BTN_CONFIRM)) {
-      logBtn("CONFIRM");
+    if (input_.wasPressed(HalGPIO::BTN_UP) || input_.wasPressed(HalGPIO::BTN_LEFT)) {
+      if (packSelectorIndex > 0) {
+        packSelectorIndex--;
+        updateRequired = true;
+      }
+    } else if (input_.wasPressed(HalGPIO::BTN_DOWN) || input_.wasPressed(HalGPIO::BTN_RIGHT)) {
+      if (packSelectorIndex < static_cast<int>(availablePacks.size()) - 1) {
+        packSelectorIndex++;
+        updateRequired = true;
+      }
+    } else if (input_.wasReleased(HalGPIO::BTN_CONFIRM)) {
       if (!availablePacks.empty()) {
         packPath = "/.crosspoint/chess/packs/" + availablePacks[packSelectorIndex];
         packName = availablePacks[packSelectorIndex];
@@ -236,21 +155,24 @@ void ChessPuzzlesApp::loop() {
         updateRequired = true;
       }
     } else if (input_.wasReleased(HalGPIO::BTN_BACK)) {
-      logBtn("BACK");
-      logModeChange(currentMode, Mode::MainMenu, "back");
-      currentMode = Mode::MainMenu;
-      updateRequired = true;
+      logEvent("EXIT", "from=PackSelect");
+      returnToLauncher();
     }
     return;
   }
 
   if (currentMode == Mode::PackMenu) {
-    if (input_.wasPressed(HalGPIO::BTN_UP)) { logBtn("UP"); if (packMenuIndex > 0) { packMenuIndex--; updateRequired = true; } }
-    else if (input_.wasPressed(HalGPIO::BTN_LEFT)) { logBtn("LEFT"); if (packMenuIndex > 0) { packMenuIndex--; updateRequired = true; } }
-    else if (input_.wasPressed(HalGPIO::BTN_DOWN)) { logBtn("DOWN"); if (packMenuIndex < PACK_MENU_ITEM_COUNT - 1) { packMenuIndex++; updateRequired = true; } }
-    else if (input_.wasPressed(HalGPIO::BTN_RIGHT)) { logBtn("RIGHT"); if (packMenuIndex < PACK_MENU_ITEM_COUNT - 1) { packMenuIndex++; updateRequired = true; } }
-    else if (input_.wasReleased(HalGPIO::BTN_CONFIRM)) {
-      logBtn("CONFIRM");
+    if (input_.wasPressed(HalGPIO::BTN_UP) || input_.wasPressed(HalGPIO::BTN_LEFT)) {
+      if (packMenuIndex > 0) {
+        packMenuIndex--;
+        updateRequired = true;
+      }
+    } else if (input_.wasPressed(HalGPIO::BTN_DOWN) || input_.wasPressed(HalGPIO::BTN_RIGHT)) {
+      if (packMenuIndex < PACK_MENU_ITEM_COUNT - 1) {
+        packMenuIndex++;
+        updateRequired = true;
+      }
+    } else if (input_.wasReleased(HalGPIO::BTN_CONFIRM)) {
       switch (static_cast<PackMenuItem>(packMenuIndex)) {
         case PackMenuItem::Continue: {
           uint32_t savedIndex = loadProgress();
@@ -283,12 +205,11 @@ void ChessPuzzlesApp::loop() {
           themeBitset.clear();
           logModeChange(currentMode, Mode::Browsing, "browse");
           currentMode = Mode::Browsing;
-            break;
-          }
+          break;
+        }
       }
       updateRequired = true;
     } else if (input_.wasReleased(HalGPIO::BTN_BACK)) {
-      logBtn("BACK");
       logModeChange(currentMode, Mode::PackSelect, "back");
       currentMode = Mode::PackSelect;
       updateRequired = true;
@@ -297,12 +218,17 @@ void ChessPuzzlesApp::loop() {
   }
 
   if (currentMode == Mode::ThemeSelect) {
-    if (input_.wasPressed(HalGPIO::BTN_UP)) { logBtn("UP"); if (themeSelectIndex > 0) { themeSelectIndex--; updateRequired = true; } }
-    else if (input_.wasPressed(HalGPIO::BTN_LEFT)) { logBtn("LEFT"); if (themeSelectIndex > 0) { themeSelectIndex--; updateRequired = true; } }
-    else if (input_.wasPressed(HalGPIO::BTN_DOWN)) { logBtn("DOWN"); if (themeSelectIndex < static_cast<int>(availableThemes.size()) - 1) { themeSelectIndex++; updateRequired = true; } }
-    else if (input_.wasPressed(HalGPIO::BTN_RIGHT)) { logBtn("RIGHT"); if (themeSelectIndex < static_cast<int>(availableThemes.size()) - 1) { themeSelectIndex++; updateRequired = true; } }
-    else if (input_.wasReleased(HalGPIO::BTN_CONFIRM)) {
-      logBtn("CONFIRM");
+    if (input_.wasPressed(HalGPIO::BTN_UP) || input_.wasPressed(HalGPIO::BTN_LEFT)) {
+      if (themeSelectIndex > 0) {
+        themeSelectIndex--;
+        updateRequired = true;
+      }
+    } else if (input_.wasPressed(HalGPIO::BTN_DOWN) || input_.wasPressed(HalGPIO::BTN_RIGHT)) {
+      if (themeSelectIndex < static_cast<int>(availableThemes.size()) - 1) {
+        themeSelectIndex++;
+        updateRequired = true;
+      }
+    } else if (input_.wasReleased(HalGPIO::BTN_CONFIRM)) {
       if (!availableThemes.empty()) {
         activeTheme = availableThemes[themeSelectIndex];
         loadThemeBitset(activeTheme);
@@ -313,7 +239,6 @@ void ChessPuzzlesApp::loop() {
         updateRequired = true;
       }
     } else if (input_.wasReleased(HalGPIO::BTN_BACK)) {
-      logBtn("BACK");
       logModeChange(currentMode, Mode::PackMenu, "back");
       currentMode = Mode::PackMenu;
       updateRequired = true;
@@ -323,26 +248,35 @@ void ChessPuzzlesApp::loop() {
 
   if (currentMode == Mode::Browsing) {
     if (input_.wasPressed(HalGPIO::BTN_UP)) {
-      logBtn("UP");
-      if (loadPrevPuzzleFromPack()) { updateRequired = true; }
+      if (browserIndex > 0) {
+        browserIndex--;
+        updateRequired = true;
+      }
     } else if (input_.wasPressed(HalGPIO::BTN_DOWN)) {
-      logBtn("DOWN");
-      if (loadNextPuzzleFromPack()) { updateRequired = true; }
+      if (browserIndex < puzzleCount - 1) {
+        browserIndex++;
+        updateRequired = true;
+      }
     } else if (input_.wasPressed(HalGPIO::BTN_LEFT)) {
-      logBtn("LEFT");
-      for (int i = 0; i < 10; i++) { if (!loadPrevPuzzleFromPack()) break; }
+      if (browserIndex >= 10) {
+        browserIndex -= 10;
+      } else {
+        browserIndex = 0;
+      }
       updateRequired = true;
     } else if (input_.wasPressed(HalGPIO::BTN_RIGHT)) {
-      logBtn("RIGHT");
-      for (int i = 0; i < 10; i++) { if (!loadNextPuzzleFromPack()) break; }
+      browserIndex += 10;
+      if (browserIndex >= puzzleCount) {
+        browserIndex = puzzleCount - 1;
+      }
       updateRequired = true;
     } else if (input_.wasReleased(HalGPIO::BTN_CONFIRM)) {
-      logBtn("CONFIRM");
-      logModeChange(currentMode, Mode::Playing, "start playing");
-      currentMode = Mode::Playing;
-      updateRequired = true;
+      if (loadPuzzleFromPack(browserIndex)) {
+        logModeChange(currentMode, Mode::Playing, "browse play");
+        currentMode = Mode::Playing;
+        updateRequired = true;
+      }
     } else if (input_.wasReleased(HalGPIO::BTN_BACK)) {
-      logBtn("BACK");
       logModeChange(currentMode, Mode::PackMenu, "back");
       currentMode = Mode::PackMenu;
       updateRequired = true;
@@ -350,13 +284,18 @@ void ChessPuzzlesApp::loop() {
     return;
   }
 
-  if (currentMode == Mode::Playing) {
-    if (input_.wasPressed(HalGPIO::BTN_UP)) { logBtn("UP"); if (inGameMenuIndex > 0) { inGameMenuIndex--; updateRequired = true; } }
-    else if (input_.wasPressed(HalGPIO::BTN_LEFT)) { logBtn("LEFT"); if (inGameMenuIndex > 0) { inGameMenuIndex--; updateRequired = true; } }
-    else if (input_.wasPressed(HalGPIO::BTN_DOWN)) { logBtn("DOWN"); if (inGameMenuIndex < IN_GAME_MENU_ITEM_COUNT - 1) { inGameMenuIndex++; updateRequired = true; } }
-    else if (input_.wasPressed(HalGPIO::BTN_RIGHT)) { logBtn("RIGHT"); if (inGameMenuIndex < IN_GAME_MENU_ITEM_COUNT - 1) { inGameMenuIndex++; updateRequired = true; } }
-    else if (input_.wasReleased(HalGPIO::BTN_CONFIRM)) {
-      logBtn("CONFIRM");
+  if (currentMode == Mode::InGameMenu) {
+    if (input_.wasPressed(HalGPIO::BTN_UP) || input_.wasPressed(HalGPIO::BTN_LEFT)) {
+      if (inGameMenuIndex > 0) {
+        inGameMenuIndex--;
+        updateRequired = true;
+      }
+    } else if (input_.wasPressed(HalGPIO::BTN_DOWN) || input_.wasPressed(HalGPIO::BTN_RIGHT)) {
+      if (inGameMenuIndex < IN_GAME_MENU_ITEM_COUNT - 1) {
+        inGameMenuIndex++;
+        updateRequired = true;
+      }
+    } else if (input_.wasReleased(HalGPIO::BTN_CONFIRM)) {
       switch (static_cast<InGameMenuItem>(inGameMenuIndex)) {
         case InGameMenuItem::Retry:
           loadPuzzleFromPack(currentPuzzleIndex);
@@ -463,13 +402,8 @@ void ChessPuzzlesApp::loop() {
           }
         };
 
-        auto scan = [&](bool wrap, int forcedUp = 0, int forcedDown = 0, int forcedLeft = 0, int forcedRight = 0) {
+        auto scan = [&](bool wrap) {
           found = false;
-
-          const bool up = forcedUp ? (forcedUp > 0) : goUp;
-          const bool down = forcedDown ? (forcedDown > 0) : goDown;
-          const bool left = forcedLeft ? (forcedLeft > 0) : goLeft;
-          const bool right = forcedRight ? (forcedRight > 0) : goRight;
 
           for (int sq : navigablePieces) {
             if (sq == curSq) continue;
@@ -480,45 +414,23 @@ void ChessPuzzlesApp::loop() {
             const int dx = x - curX;
             const int dy = y - curY;
 
-            if (up) {
+            if (goUp) {
               if (!wrap && dy >= 0) continue;
               if (wrap && dy <= 0) continue;
               consider(sq, wrap ? -dy : -dy, dx < 0 ? -dx : dx);
-            } else if (down) {
+            } else if (goDown) {
               if (!wrap && dy <= 0) continue;
               if (wrap && dy >= 0) continue;
               consider(sq, wrap ? dy : dy, dx < 0 ? -dx : dx);
-            } else if (left) {
+            } else if (goLeft) {
               if (!wrap && dx >= 0) continue;
               if (wrap && dx <= 0) continue;
               consider(sq, wrap ? -dx : -dx, dy < 0 ? -dy : dy);
-            } else if (right) {
+            } else if (goRight) {
               if (!wrap && dx <= 0) continue;
               if (wrap && dx >= 0) continue;
               consider(sq, wrap ? dx : dx, dy < 0 ? -dy : dy);
             }
-          }
-        };
-
-        scan(false);
-        if (!found) {
-          if (goLeft) {
-            logEvent("NAV", "Wrapping LEFT->UP");
-            scan(false, 1, 0, 0, 0);
-          } else if (goRight) {
-            logEvent("NAV", "Wrapping RIGHT->DOWN");
-            scan(false, 0, 1, 0, 0);
-          } else if (goUp) {
-            logEvent("NAV", "Wrapping UP->LEFT");
-            scan(false, 0, 0, 1, 0);
-          } else if (goDown) {
-            logEvent("NAV", "Wrapping DOWN->RIGHT");
-            scan(false, 0, 0, 0, 1);
-          }
-        }
-        if (!found) {
-          scan(true);
-        }
           }
         };
 
@@ -572,13 +484,8 @@ void ChessPuzzlesApp::loop() {
           }
         };
 
-        auto scan = [&](bool wrap, int forcedUp = 0, int forcedDown = 0, int forcedLeft = 0, int forcedRight = 0) {
+        auto scan = [&](bool wrap) {
           found = false;
-
-          const bool up = forcedUp ? (forcedUp > 0) : goUp;
-          const bool down = forcedDown ? (forcedDown > 0) : goDown;
-          const bool left = forcedLeft ? (forcedLeft > 0) : goLeft;
-          const bool right = forcedRight ? (forcedRight > 0) : goRight;
 
           for (size_t i = 0; i < legalMovesFromSelected.size(); i++) {
             const int sq = legalMovesFromSelected[i].to;
@@ -590,19 +497,19 @@ void ChessPuzzlesApp::loop() {
             const int dx = x - curX;
             const int dy = y - curY;
 
-            if (up) {
+            if (goUp) {
               if (!wrap && dy >= 0) continue;
               if (wrap && dy <= 0) continue;
               consider(sq, -dy, dx < 0 ? -dx : dx);
-            } else if (down) {
+            } else if (goDown) {
               if (!wrap && dy <= 0) continue;
               if (wrap && dy >= 0) continue;
               consider(sq, dy, dx < 0 ? -dx : dx);
-            } else if (left) {
+            } else if (goLeft) {
               if (!wrap && dx >= 0) continue;
               if (wrap && dx <= 0) continue;
               consider(sq, -dx, dy < 0 ? -dy : dy);
-            } else if (right) {
+            } else if (goRight) {
               if (!wrap && dx <= 0) continue;
               if (wrap && dx >= 0) continue;
               consider(sq, dx, dy < 0 ? -dy : dy);
@@ -611,21 +518,6 @@ void ChessPuzzlesApp::loop() {
         };
 
         scan(false);
-        if (!found) {
-          if (goLeft) {
-            logEvent("NAV", "Wrapping LEFT->UP");
-            scan(false, 1, 0, 0, 0);
-          } else if (goRight) {
-            logEvent("NAV", "Wrapping RIGHT->DOWN");
-            scan(false, 0, 1, 0, 0);
-          } else if (goUp) {
-            logEvent("NAV", "Wrapping UP->LEFT");
-            scan(false, 0, 0, 1, 0);
-          } else if (goDown) {
-            logEvent("NAV", "Wrapping DOWN->RIGHT");
-            scan(false, 0, 0, 0, 1);
-          }
-        }
         if (!found) {
           scan(true);
         }
@@ -647,7 +539,6 @@ void ChessPuzzlesApp::loop() {
   }
 
   if (input_.wasReleased(HalGPIO::BTN_CONFIRM)) {
-    logBtn("CONFIRM");
     int sq = cursorSquare();
     
     if (pieceSelected) {
@@ -668,7 +559,6 @@ void ChessPuzzlesApp::loop() {
     }
     updateRequired = true;
   } else if (input_.wasReleased(HalGPIO::BTN_BACK)) {
-    logBtn("BACK");
     if (pieceSelected) {
       deselectPiece();
       updateRequired = true;
@@ -700,9 +590,7 @@ void ChessPuzzlesApp::render() {
 
   renderer.clearScreen();
   
-  if (currentMode == Mode::MainMenu) {
-    renderMainMenu();
-  } else if (currentMode == Mode::PackSelect) {
+  if (currentMode == Mode::PackSelect) {
     renderPackSelect();
   } else if (currentMode == Mode::PackMenu) {
     renderPackMenu();
@@ -758,7 +646,7 @@ void ChessPuzzlesApp::renderHint() {
 
   const Chess::Move& m = currentPuzzle.solution[currentMoveIndex];
 
-  auto drawBox = [&](int sq, int thickness, bool isToSquare) {
+  auto drawBox = [&](int sq, int thickness, bool fullBox) {
     const int file = Chess::BoardState::fileOf(sq);
     const int rank = Chess::BoardState::rankOf(sq);
     const int x = screenX(file);
@@ -767,12 +655,17 @@ void ChessPuzzlesApp::renderHint() {
     const bool squareIsLight = (file + rank) % 2 == 1;
     const bool color = squareIsLight;
 
-    if (isToSquare) {
-      drawHatchedRect(x, y, SQUARE_SIZE, SQUARE_SIZE, color, 4);
+    if (fullBox) {
+      for (int t = 0; t < thickness; t++) {
+        renderer.drawLine(x + t, y + t, x + SQUARE_SIZE - 1 - t, y + t, color);
+        renderer.drawLine(x + t, y + SQUARE_SIZE - 1 - t, x + SQUARE_SIZE - 1 - t,
+                          y + SQUARE_SIZE - 1 - t, color);
+        renderer.drawLine(x + t, y + t, x + t, y + SQUARE_SIZE - 1 - t, color);
+        renderer.drawLine(x + SQUARE_SIZE - 1 - t, y + t, x + SQUARE_SIZE - 1 - t,
+                          y + SQUARE_SIZE - 1 - t, color);
+      }
       return;
     }
-
-    drawHatchedRect(x, y, SQUARE_SIZE, SQUARE_SIZE, color, 6);
 
     constexpr int cornerLen = 18;
     for (int t = 0; t < thickness; t++) {
@@ -792,6 +685,7 @@ void ChessPuzzlesApp::renderHint() {
     }
   };
 
+  // From: bracket corners. To: full box.
   drawBox(m.from, 4, false);
   drawBox(m.to, 3, true);
 }
@@ -842,14 +736,19 @@ void ChessPuzzlesApp::renderInGameMenu() {
   for (int i = 0; i < itemCount; i++) {
     const int y = itemStartY + i * itemLineHeight;
 
-        if (i == inGameMenuIndex) {
-      const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, items[i]);
-      const int rectX = (screenWidth - textWidth) / 2 - MENU_HIGHLIGHT_PADDING;
-      renderer.fillRect(rectX, y - 6, textWidth + MENU_HIGHLIGHT_PADDING * 2, itemLineHeight - 6);
-      renderer.drawText(UI_12_FONT_ID, rectX + MENU_HIGHLIGHT_PADDING, y, items[i], false);
-    } else {
-      renderer.drawText(UI_12_FONT_ID, itemTextX, y, items[i], false);
+    if (i == inGameMenuIndex) {
+      // Draw a simple outline to indicate selection.
+      const int outlineX = panelX + 18;
+      const int outlineY = y - 6;
+      const int outlineW = panelWidth - 36;
+      const int outlineH = itemLineHeight - 6;
+      renderer.drawLine(outlineX, outlineY, outlineX + outlineW, outlineY, false);
+      renderer.drawLine(outlineX, outlineY + outlineH, outlineX + outlineW, outlineY + outlineH, false);
+      renderer.drawLine(outlineX, outlineY, outlineX, outlineY + outlineH, false);
+      renderer.drawLine(outlineX + outlineW, outlineY, outlineX + outlineW, outlineY + outlineH, false);
     }
+
+    renderer.drawText(UI_12_FONT_ID, itemTextX, y, items[i], false);
   }
 
   const char* footer = "Up/Down: choose";
@@ -993,36 +892,6 @@ void ChessPuzzlesApp::renderLegalMoveHints() {
   }
 }
 
-void ChessPuzzlesApp::drawHatchedRect(int x, int y, int w, int h, bool color, int spacing) {
-  for (int i = -h; i < w; i += spacing) {
-    int x0 = x + i;
-    int y0 = y;
-    int x1 = x + i + h;
-    int y1 = y + h;
-
-    if (x0 < x) {
-      y0 += (x - x0);
-      x0 = x;
-    }
-    if (x1 > x + w) {
-      y1 -= (x1 - (x + w));
-      x1 = x + w;
-    }
-    if (y0 < y) {
-      x0 += (y - y0);
-      y0 = y;
-    }
-    if (y1 > y + h) {
-      x1 -= (y1 - (y + h));
-      y1 = y + h;
-    }
-
-    if (x0 < x1 && y0 < y1) {
-      renderer_.drawLine(x0, y0, x1, y1, color);
-    }
-  }
-}
-
 void ChessPuzzlesApp::renderStatus() {
   auto& renderer = renderer_;
 
@@ -1057,7 +926,7 @@ void ChessPuzzlesApp::renderStatus() {
       if (!activeTheme.empty()) {
         std::string prettyTheme = activeTheme;
         std::replace(prettyTheme.begin(), prettyTheme.end(), '_', ' ');
-        std::string themeLine = \"Theme: \" + prettyTheme;
+        std::string themeLine = "Theme: " + prettyTheme;
         const int maxW = renderer.getScreenWidth() - 20;
         if (renderer.getTextWidth(UI_10_FONT_ID, themeLine.c_str()) > maxW) {
           themeLine = renderer.truncatedText(UI_10_FONT_ID, themeLine.c_str(), maxW);
@@ -1066,17 +935,7 @@ void ChessPuzzlesApp::renderStatus() {
         infoY += 20;
       }
 
-      if (!currentPuzzle.opening.empty()) {
-        std::string openingLine = \"Opening: \" + currentPuzzle.opening;
-        const int maxW = renderer.getScreenWidth() - 20;
-        if (renderer.getTextWidth(UI_10_FONT_ID, openingLine.c_str()) > maxW) {
-          openingLine = renderer.truncatedText(UI_10_FONT_ID, openingLine.c_str(), maxW);
-        }
-        renderer.drawCenteredText(UI_10_FONT_ID, infoY, openingLine.c_str());
-        infoY += 20;
-      }
-
-      renderer.drawCenteredText(UI_10_FONT_ID, infoY, \"Hold Menu for options\");
+      renderer.drawCenteredText(UI_10_FONT_ID, infoY, "Hold Menu for options");
     }
   }
 }
@@ -1116,7 +975,7 @@ void ChessPuzzlesApp::loadAvailablePacks() {
 void ChessPuzzlesApp::renderPackSelect() {
   auto& renderer = renderer_;
 
-  renderer.drawCenteredText(UI_12_FONT_ID, 30, "Chess");
+  renderer.drawCenteredText(UI_12_FONT_ID, 30, "Chess Puzzles");
   renderer.drawCenteredText(UI_10_FONT_ID, 60, "Select a puzzle pack:");
   
   if (availablePacks.empty()) {
@@ -1145,9 +1004,9 @@ void ChessPuzzlesApp::renderPackSelect() {
       if (idx == packSelectorIndex) {
         int textWidth = renderer.getTextWidth(UI_12_FONT_ID, displayName.c_str());
         int screenWidth = renderer.getScreenWidth();
-        int rectX = (screenWidth - textWidth) / 2 - MENU_HIGHLIGHT_PADDING;
-        renderer.fillRect(rectX, y - 2, textWidth + MENU_HIGHLIGHT_PADDING * 2, lineHeight - 4);
-        renderer.drawText(UI_12_FONT_ID, rectX + MENU_HIGHLIGHT_PADDING, y, displayName.c_str(), false);
+        int rectX = (screenWidth - textWidth) / 2 - 10;
+        renderer.fillRect(rectX, y - 2, textWidth + 20, lineHeight - 4);
+        renderer.drawText(UI_12_FONT_ID, rectX + 10, y, displayName.c_str(), false);
       } else {
         renderer.drawCenteredText(UI_10_FONT_ID, y, displayName.c_str());
       }
@@ -1557,10 +1416,10 @@ void ChessPuzzlesApp::renderPackMenu() {
     int y = startY + i * lineHeight;
     
     if (i == packMenuIndex) {
+      renderer.fillRect(menuX, y - 2, menuWidth, lineHeight - 8);
       int textWidth = renderer.getTextWidth(UI_12_FONT_ID, menuItems[i]);
-      int rectX = (screenWidth - textWidth) / 2 - MENU_HIGHLIGHT_PADDING;
-      renderer.fillRect(rectX, y - 2, textWidth + MENU_HIGHLIGHT_PADDING * 2, lineHeight - 8);
-      renderer.drawText(UI_12_FONT_ID, rectX + MENU_HIGHLIGHT_PADDING, y, menuItems[i], false);
+      int textX = (screenWidth - textWidth) / 2;
+      renderer.drawText(UI_12_FONT_ID, textX, y, menuItems[i], false);
     } else {
       renderer.drawCenteredText(UI_10_FONT_ID, y, menuItems[i]);
     }
@@ -1602,9 +1461,7 @@ void ChessPuzzlesApp::renderBrowser() {
     snprintf(itemStr, sizeof(itemStr), "%s #%d", solved ? "[x]" : "[ ]", idx + 1);
     
     if (idx == browserIndex) {
-      int textWidth = renderer.getTextWidth(UI_12_FONT_ID, itemStr);
-      int rectX = listX + 10 - MENU_HIGHLIGHT_PADDING;
-      renderer.fillRect(rectX, y - 2, textWidth + MENU_HIGHLIGHT_PADDING * 2, lineHeight - 4);
+      renderer.fillRect(listX, y - 2, itemWidth, lineHeight - 4);
       renderer.drawText(UI_12_FONT_ID, listX + 10, y, itemStr, false);
     } else {
       renderer.drawText(UI_10_FONT_ID, listX + 10, y, itemStr, true);
@@ -1882,9 +1739,7 @@ void ChessPuzzlesApp::renderThemeSelect() {
       std::replace(prettyTheme.begin(), prettyTheme.end(), '_', ' ');
       
       if (idx == themeSelectIndex) {
-        int textWidth = renderer.getTextWidth(UI_10_FONT_ID, prettyTheme.c_str());
-        int rectX = listX + 10 - MENU_HIGHLIGHT_PADDING;
-        renderer.fillRect(rectX, y - 2, textWidth + MENU_HIGHLIGHT_PADDING * 2, lineHeight - 4);
+        renderer.fillRect(listX, y - 2, itemWidth, lineHeight - 4);
         renderer.drawText(UI_10_FONT_ID, listX + 10, y, prettyTheme.c_str(), false);
       } else {
         renderer.drawText(UI_10_FONT_ID, listX + 10, y, prettyTheme.c_str(), true);
@@ -1941,7 +1796,6 @@ void ChessPuzzlesApp::returnToLauncher() {
   const esp_partition_t* running = esp_ota_get_running_partition();
   const esp_partition_t* target = nullptr;
 
-  Serial.printf("[CHESS] [%lu] NAV: Returning to launcher\n", millis());
   esp_partition_subtype_t runningSubtype = running ? running->subtype : static_cast<esp_partition_subtype_t>(0);
   esp_partition_subtype_t targetSubtype = static_cast<esp_partition_subtype_t>(0);
 
@@ -1952,38 +1806,33 @@ void ChessPuzzlesApp::returnToLauncher() {
     targetSubtype = ESP_PARTITION_SUBTYPE_APP_OTA_0;
     target = esp_partition_find_first(ESP_PARTITION_TYPE_APP, targetSubtype, nullptr);
   } else {
-    Serial.printf("[CHESS] [%lu] BOOT: Running partition subtype not ota_0/ota_1 (%d); falling back to next update partition\n", 
-                  millis(), static_cast<int>(runningSubtype));
+    Serial.printf("[CHESS] Running partition subtype not ota_0/ota_1 (%d); falling back to next update partition\n", static_cast<int>(runningSubtype));
   }
 
   if (!target) {
     if (runningSubtype == ESP_PARTITION_SUBTYPE_APP_OTA_0 || runningSubtype == ESP_PARTITION_SUBTYPE_APP_OTA_1) {
-      Serial.printf("[CHESS] [%lu] BOOT: Target OTA partition not found for subtype=%d; falling back to next update partition\n", 
-                    millis(), static_cast<int>(targetSubtype));
+      Serial.printf("[CHESS] Target OTA partition not found for subtype=%d; falling back to next update partition\n", static_cast<int>(targetSubtype));
     }
     // Explicitly pass running to avoid ambiguous NULL behavior.
     target = esp_ota_get_next_update_partition(running);
   }
 
-  Serial.printf("[CHESS] [%lu] BOOT: Running partition label=%s subtype=%d\n", 
-                millis(), running ? running->label : "<null>", static_cast<int>(runningSubtype));
-  Serial.printf("[CHESS] [%lu] BOOT: Target partition label=%s subtype=%d addr=0x%08X\n", 
-                millis(), target ? target->label : "<null>", target ? static_cast<int>(target->subtype) : -1,
-                target ? target->address : 0);
+  Serial.printf("[CHESS] Running partition label=%s subtype=%d\n", running ? running->label : "<null>", static_cast<int>(runningSubtype));
+  Serial.printf("[CHESS] Target partition label=%s subtype=%d\n", target ? target->label : "<null>", target ? static_cast<int>(target->subtype) : -1);
 
   if (!validatePartition(target)) {
-    Serial.printf("[CHESS] [%lu] ERROR: Aborting returnToLauncher: target partition validation failed\n", millis());
+    Serial.println("[CHESS] Aborting returnToLauncher: target partition validation failed");
     renderPartitionError();
     return;
   }
 
   esp_err_t err = target ? esp_ota_set_boot_partition(target) : ESP_ERR_NOT_FOUND;
-  Serial.printf("[CHESS] [%lu] BOOT: esp_ota_set_boot_partition result=%d\n", millis(), static_cast<int>(err));
+  Serial.printf("[CHESS] esp_ota_set_boot_partition result=%d\n", static_cast<int>(err));
 
   // If we failed to set the boot partition, restarting will likely return to this app.
   // Still restart so the user isn't trapped, but log clearly for debugging.
   if (err != ESP_OK) {
-    Serial.printf("[CHESS] [%lu] ERROR: failed to switch boot partition; restart may relaunch this app\n", millis());
+    Serial.println("[CHESS] WARNING: failed to switch boot partition; restart may relaunch this app");
   }
 
   delay(50);

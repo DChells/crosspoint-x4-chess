@@ -8,11 +8,10 @@
 #include <freertos/semphr.h>
 #include <freertos/task.h>
 
-#include <esp_partition.h>
-
 #include <vector>
 #include <string>
 
+#include <esp_partition.h>
 
 #include "ChessCore.h"
 
@@ -29,12 +28,8 @@ class ChessPuzzlesApp final {
   HalGPIO& input_;
   GfxRenderer renderer_;
 
-  enum class Mode { MainMenu, PackSelect, PackMenu, ThemeSelect, Browsing, Playing, InGameMenu };
-  Mode currentMode = Mode::MainMenu;
-  
-  enum class MainMenuItem { Puzzles, OneVsOne, VsBot };
-  int mainMenuIndex = 0;
-  static constexpr int MAIN_MENU_ITEM_COUNT = 3;
+  enum class Mode { PackSelect, PackMenu, ThemeSelect, Browsing, Playing, InGameMenu };
+  Mode currentMode = Mode::PackSelect;
   
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
@@ -67,9 +62,8 @@ class ChessPuzzlesApp final {
   static constexpr int BOARD_SIZE = SQUARE_SIZE * 8;
   static constexpr int BOARD_OFFSET_X = 0;
   static constexpr int BOARD_OFFSET_Y = 0;
-   static constexpr int STATUS_Y = BOARD_SIZE + 10;
-  static constexpr int MENU_HIGHLIGHT_PADDING = 8;
-
+  static constexpr int STATUS_Y = BOARD_SIZE + 10;
+  
   std::string packPath;
   std::string packName;
   uint32_t puzzleCount = 0;
@@ -102,7 +96,6 @@ class ChessPuzzlesApp final {
   [[noreturn]] void displayTaskLoop();
   
   void render();
-  void renderMainMenu();
   void renderPackSelect();
   void renderPackMenu();
   void renderThemeSelect();
@@ -113,7 +106,6 @@ class ChessPuzzlesApp final {
   void renderCursor();
   void renderLegalMoveHints();
   void renderHint();
-  void drawHatchedRect(int x, int y, int w, int h, bool color, int spacing = 4);
   void renderStatus();
   
   void loadAvailablePacks();
@@ -152,9 +144,8 @@ class ChessPuzzlesApp final {
 
   void renderSdCardError();
   void renderPartitionError();
-  void returnToLauncher();
-
   bool validatePartition(const esp_partition_t* partition);
+  void returnToLauncher();
 
   void logModeChange(Mode from, Mode to, const char* reason);
   void logEvent(const char* ev, const char* fmt = nullptr, ...) const;
