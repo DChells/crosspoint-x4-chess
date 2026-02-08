@@ -739,20 +739,7 @@ void ChessPuzzlesApp::renderInGameMenu() {
   for (int i = 0; i < itemCount; i++) {
     const int y = itemStartY + i * itemLineHeight;
 
-    if (i == inGameMenuIndex) {
-      // Draw a simple outline to indicate selection.
-      const int outlineX = panelX + 18;
-      const int outlineY = y - 6;
-      const int outlineW = panelWidth - 36;
-      const int outlineH = itemLineHeight - 6;
-      renderer.drawLine(outlineX, outlineY, outlineX + outlineW, outlineY, false);
-      renderer.drawLine(outlineX, outlineY + outlineH, outlineX + outlineW, outlineY + outlineH, false);
-      renderer.drawLine(outlineX, outlineY, outlineX, outlineY + outlineH, false);
-      renderer.drawLine(outlineX + outlineW, outlineY, outlineX + outlineW, outlineY + outlineH, false);
-    }
-
-    renderer.drawText(UI_12_FONT_ID, itemTextX, y, items[i], false);
-  }
+    if (i == inGameMenuIndex) {\n      const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, items[i]);\n      const int rectX = (screenWidth - textWidth) / 2 - MENU_HIGHLIGHT_PADDING;\n      renderer.fillRect(rectX, y - 6, textWidth + MENU_HIGHLIGHT_PADDING * 2, itemLineHeight - 6);\n      renderer.drawText(UI_12_FONT_ID, rectX + MENU_HIGHLIGHT_PADDING, y, items[i], false);\n    } else {\n      renderer.drawText(UI_12_FONT_ID, itemTextX, y, items[i], false);\n    }\n  }
 
   const char* footer = "Up/Down: choose";
   const int footerWidth = renderer.getTextWidth(UI_10_FONT_ID, footer);
@@ -1014,14 +1001,7 @@ void ChessPuzzlesApp::renderPackSelect() {
         displayName = displayName.substr(0, displayName.size() - 4);
       }
       
-      if (idx == packSelectorIndex) {
-        int textWidth = renderer.getTextWidth(UI_12_FONT_ID, displayName.c_str());
-        int screenWidth = renderer.getScreenWidth();
-        int rectX = (screenWidth - textWidth) / 2 - 10;
-        renderer.fillRect(rectX, y - 2, textWidth + 20, lineHeight - 4);
-        renderer.drawText(UI_12_FONT_ID, rectX + 10, y, displayName.c_str(), false);
-      } else {
-        renderer.drawCenteredText(UI_10_FONT_ID, y, displayName.c_str());
+      if (idx == packSelectorIndex) {\n        int textWidth = renderer.getTextWidth(UI_12_FONT_ID, displayName.c_str());\n        int screenWidth = renderer.getScreenWidth();\n        int rectX = (screenWidth - textWidth) / 2 - MENU_HIGHLIGHT_PADDING;\n        renderer.fillRect(rectX, y - 2, textWidth + MENU_HIGHLIGHT_PADDING * 2, lineHeight - 4);\n        renderer.drawText(UI_12_FONT_ID, rectX + MENU_HIGHLIGHT_PADDING, y, displayName.c_str(), false);\n      } else {\n        renderer.drawCenteredText(UI_10_FONT_ID, y, displayName.c_str());
       }
     }
     
@@ -1428,13 +1408,7 @@ void ChessPuzzlesApp::renderPackMenu() {
   for (int i = 0; i < PACK_MENU_ITEM_COUNT; i++) {
     int y = startY + i * lineHeight;
     
-    if (i == packMenuIndex) {
-      renderer.fillRect(menuX, y - 2, menuWidth, lineHeight - 8);
-      int textWidth = renderer.getTextWidth(UI_12_FONT_ID, menuItems[i]);
-      int textX = (screenWidth - textWidth) / 2;
-      renderer.drawText(UI_12_FONT_ID, textX, y, menuItems[i], false);
-    } else {
-      renderer.drawCenteredText(UI_10_FONT_ID, y, menuItems[i]);
+    if (i == packMenuIndex) {\n      int textWidth = renderer.getTextWidth(UI_12_FONT_ID, menuItems[i]);\n      int rectX = (screenWidth - textWidth) / 2 - MENU_HIGHLIGHT_PADDING;\n      renderer.fillRect(rectX, y - 2, textWidth + MENU_HIGHLIGHT_PADDING * 2, lineHeight - 8);\n      renderer.drawText(UI_12_FONT_ID, rectX + MENU_HIGHLIGHT_PADDING, y, menuItems[i], false);\n    } else {\n      renderer.drawCenteredText(UI_10_FONT_ID, y, menuItems[i]);
     }
   }
   
@@ -1473,11 +1447,7 @@ void ChessPuzzlesApp::renderBrowser() {
     char itemStr[64];
     snprintf(itemStr, sizeof(itemStr), "%s #%d", solved ? "[x]" : "[ ]", idx + 1);
     
-    if (idx == browserIndex) {
-      renderer.fillRect(listX, y - 2, itemWidth, lineHeight - 4);
-      renderer.drawText(UI_12_FONT_ID, listX + 10, y, itemStr, false);
-    } else {
-      renderer.drawText(UI_10_FONT_ID, listX + 10, y, itemStr, true);
+    if (idx == browserIndex) {\n      int textWidth = renderer.getTextWidth(UI_12_FONT_ID, itemStr);\n      int rectX = listX + 10 - MENU_HIGHLIGHT_PADDING;\n      renderer.fillRect(rectX, y - 2, textWidth + MENU_HIGHLIGHT_PADDING * 2, lineHeight - 4);\n      renderer.drawText(UI_12_FONT_ID, listX + 10, y, itemStr, false);\n    } else {\n      renderer.drawText(UI_10_FONT_ID, listX + 10, y, itemStr, true);
     }
   }
   
@@ -1751,11 +1721,7 @@ void ChessPuzzlesApp::renderThemeSelect() {
       std::string prettyTheme = theme;
       std::replace(prettyTheme.begin(), prettyTheme.end(), '_', ' ');
       
-      if (idx == themeSelectIndex) {
-        renderer.fillRect(listX, y - 2, itemWidth, lineHeight - 4);
-        renderer.drawText(UI_10_FONT_ID, listX + 10, y, prettyTheme.c_str(), false);
-      } else {
-        renderer.drawText(UI_10_FONT_ID, listX + 10, y, prettyTheme.c_str(), true);
+      if (idx == themeSelectIndex) {\n        int textWidth = renderer.getTextWidth(UI_10_FONT_ID, prettyTheme.c_str());\n        int rectX = listX + 10 - MENU_HIGHLIGHT_PADDING;\n        renderer.fillRect(rectX, y - 2, textWidth + MENU_HIGHLIGHT_PADDING * 2, lineHeight - 4);\n        renderer.drawText(UI_10_FONT_ID, listX + 10, y, prettyTheme.c_str(), false);\n      } else {\n        renderer.drawText(UI_10_FONT_ID, listX + 10, y, prettyTheme.c_str(), true);
       }
     }
     
